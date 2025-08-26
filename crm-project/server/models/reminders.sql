@@ -1,0 +1,6 @@
+CREATE TABLE reminders (
+  id SERIAL PRIMARY KEY,
+  task VARCHAR(255),
+  due DATE,
+  done BOOLEAN DEFAULT FALSE
+);
