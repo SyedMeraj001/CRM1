@@ -2,3 +2,25 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+.glass-card {
+  background: #fff;
+  color: #222;
+  border-radius: 1.5rem;
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
+  border: 1px solid #e5e7eb;
+  padding: 2rem;
+  margin-bottom: 2rem;
+  transition: box-shadow 0.3s, transform 0.3s;
+  cursor: pointer;
+  will-change: transform;
+}
+.glass-card.magic-bento-card:hover {
+  box-shadow: 0 12px 40px 0 rgba(59, 130, 246, 0.15), 0 8px 32px 0 rgba(31, 38, 135, 0.17);
+  transform: translateY(-8px) scale(1.06) rotate(-1deg);
+  border-color: #3b82f6;
+  z-index: 2;
+}
+.glass-card.magic-bento-card:active {
+  transform: scale(0.98);
+}

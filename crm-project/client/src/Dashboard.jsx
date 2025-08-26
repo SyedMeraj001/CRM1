@@ -1,13 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import axios from 'axios';
 import { Link, useNavigate } from "react-router-dom";
 import { Line } from 'react-chartjs-2';
+import { FiBarChart2, FiUsers, FiTrendingUp, FiDollarSign, FiBell, FiMessageCircle, FiSettings, FiActivity, FiFileText, FiUser, FiPieChart } from 'react-icons/fi';
 import {
   Chart as ChartJS,
   LineElement,
   PointElement,
   CategoryScale,
   LinearScale,
-  Tooltip,                                                                                                                                                        
+  Tooltip,
   Legend,
 } from 'chart.js';
 import ActivityTracker from "./pages/ActivityTracker";
@@ -19,71 +21,11 @@ import Notifications from "./pages/Notifications";
 import LeadPipeline, { getMarketingLeadsCount } from "./pages/LeadPipeline";
 import Reminders from "./pages/Reminders";
 import Reports from "./pages/Reports";
+import MagicBento from "./components/MagicBento";
 
 ChartJS.register(LineElement, PointElement, CategoryScale, LinearScale, Tooltip, Legend);
 
-const recentActivities = [
-  {
-    type: "Meeting",
-    title: "Kickoff with ABC Corp",
-    timestamp: "2025-07-24 10:00",
-  },
-  {
-    type: "Call",
-    title: "Call with XYZ Pvt Ltd",
-    timestamp: "2025-07-25 14:30",
-  },
-];
-
-// Example: Use your reminders array or fetch from state/store/API
-const reminders = [
-  { task: "Call Client", due: "Tomorrow" },
-  { task: "Send ESG Update", due: "2 days" },
-];
-
-const employees = [
-  { name: "Evan Morales", role: "Product Manager" },
-  { name: "Kenneth Osborne", role: "Analyst" },
-];
-
-// Prepare chart.js data from analytics trend
-const salesChartData = {
-  labels: sampleTrend.map((d) => d.period),
-  datasets: [
-    {
-      label: "Sales Trend",
-      data: sampleTrend.map((d) => d.value),
-      borderColor: "#a78bfa",
-      backgroundColor: "rgba(167,139,250,0.2)",
-      tension: 0.4,
-      pointRadius: 6,
-      pointHoverRadius: 10,
-    },
-  ],
-};
-
-const eventsChartData = {
-  labels: [
-    "2025-07-01",
-    "2025-07-05",
-    "2025-07-10",
-    "2025-07-15",
-    "2025-07-20",
-    "2025-07-25",
-    "2025-07-29",
-  ],
-  datasets: [
-    {
-      label: "Events",
-      data: [12, 19, 7, 14, 10, 16, 9],
-      borderColor: "#22d3ee",
-      backgroundColor: "rgba(34,211,238,0.2)",
-      tension: 0.4,
-      pointRadius: 6,
-      pointHoverRadius: 10,
-    },
-  ],
-};
+// ...existing code...
 
 const eventsChartOptions = {
   responsive: true,
@@ -131,10 +73,23 @@ const sidebarLinks = [
 ];
 
 const Dashboard = () => {
+  // Data states for backend-fetched content
+  const [recentActivities, setRecentActivities] = useState([]);
+  const [reminders, setReminders] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [kpiData, setKpiData] = useState({ revenue: 0, leads: 0, conversion: 0, companies: 0 });
+  const [metrics, setMetrics] = useState({ esg: 0, tasks: 0, compliance: 0, tickets: 0 });
+
+  // Chart data states
+  const [salesChartData, setSalesChartData] = useState({ labels: [], datasets: [] });
+  const [eventsChartData, setEventsChartData] = useState({ labels: [], datasets: [] });
+
   const [activeTab, setActiveTab] = useState("dashboard");
   const [search, setSearch] = useState("");
-  const [marketingLeads, setMarketingLeads] = useState(getMarketingLeadsCount());
   const [typedText, setTypedText] = useState('');
+  const [globalResults, setGlobalResults] = useState({});
+  const [loadingSearch, setLoadingSearch] = useState(false);
+  const searchTimeout = useRef();
   const navigate = useNavigate();
 
   // Always get username and role from localStorage at the top
@@ -145,40 +100,59 @@ const Dashboard = () => {
   const activeModule =
     sidebarLinks.find((item) => item.to === `/${activeTab}`)?.component || null;
 
-  // Filter reminders and activities based on search
-  const filteredReminders = reminders.filter(
-    (rem) =>
-      rem.task.toLowerCase().includes(search.toLowerCase()) ||
-      rem.due.toLowerCase().includes(search.toLowerCase())
-  );
 
-  const filteredActivities = recentActivities.filter(
-    (a) =>
-      a.type.toLowerCase().includes(search.toLowerCase()) ||
-      a.title.toLowerCase().includes(search.toLowerCase()) ||
-      a.timestamp.toLowerCase().includes(search.toLowerCase())
-  );
-
-  // Example notifications array (replace with your actual notifications source if needed)
-  const notifications = [
-    { type: "Alert", title: "New compliance deadline", timestamp: "2025-07-28 09:00" },
-    { type: "Reminder", title: "Submit Q2 ESG report", timestamp: "2025-07-27 16:30" },
-  ];
-
-  // Filter notifications based on search
-  const filteredNotifications = notifications.filter(
-    (n) =>
-      n.type.toLowerCase().includes(search.toLowerCase()) ||
-      n.title.toLowerCase().includes(search.toLowerCase()) ||
-      n.timestamp.toLowerCase().includes(search.toLowerCase())
-  );
-
+  // Global search: call backend
   useEffect(() => {
-    const interval = setInterval(() => {
-      // fetch new reminders/notifications from backend
-      setMarketingLeads(getMarketingLeadsCount());
-    }, 5000);
-    return () => clearInterval(interval);
+    if (!search || search.length < 2) {
+      setGlobalResults({});
+      return;
+    }
+    setLoadingSearch(true);
+    if (searchTimeout.current) clearTimeout(searchTimeout.current);
+    searchTimeout.current = setTimeout(async () => {
+      try {
+        const res = await axios.get(`/api/global-search?q=${encodeURIComponent(search)}`);
+        // Group by type
+        const grouped = {};
+        (res.data.results || []).forEach(item => {
+          if (!grouped[item.type]) grouped[item.type] = [];
+          grouped[item.type].push(item);
+        });
+        setGlobalResults(grouped);
+      } catch (err) {
+        setGlobalResults({});
+      } finally {
+        setLoadingSearch(false);
+      }
+    }, 350); // debounce
+    // eslint-disable-next-line
+  }, [search]);
+
+  // Fetch dashboard data from backend
+  useEffect(() => {
+    async function fetchDashboardData() {
+      try {
+        const [kpiRes, metricsRes, activitiesRes, remindersRes, notificationsRes, salesRes, eventsRes] = await Promise.all([
+          axios.get("/api/dashboard/kpi"),
+          axios.get("/api/dashboard/metrics"),
+          axios.get("/api/activities"),
+          axios.get("/api/reminders"),
+          axios.get("/api/notifications"),
+          axios.get("/api/analytics/sales"),
+          axios.get("/api/analytics/events"),
+        ]);
+        setKpiData(kpiRes.data);
+        setMetrics(metricsRes.data);
+        setRecentActivities(activitiesRes.data);
+        setReminders(remindersRes.data);
+        setNotifications(notificationsRes.data);
+        setSalesChartData(salesRes.data);
+        setEventsChartData(eventsRes.data);
+      } catch (err) {
+        // fallback: show empty or error state
+      }
+    }
+    fetchDashboardData();
   }, []);
 
   useEffect(() => {
@@ -194,32 +168,36 @@ const Dashboard = () => {
   }, [username]);
 
   return (
-    <div className="flex min-h-screen bg-gradient-to-tr from-[#0f2027] via-[#2c5364] to-[#24243e] text-white font-sans">
+  <div className="flex min-h-screen bg-gradient-to-br from-[#1A1A2E] via-[#16213E] to-[#0F3460] text-white font-sans" style={{ fontFamily: 'Inter, Poppins, sans-serif' }}>
       {/* Sidebar */}
-      <aside className="w-64 min-h-screen bg-[#0a1026] shadow-xl p-6 flex flex-col sidebar-animate">
-        {/* User Profile Section */}
+  <aside className="w-72 min-h-screen bg-gradient-to-b from-[#16213E] to-[#0F3460] text-white shadow-xl p-6 flex flex-col sidebar-animate" style={{ borderRight: '1px solid #00ADB5', boxShadow: '0 8px 32px 0 rgba(0,173,181,0.18)' }}>
+        {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <img
-            src="/assets/logo1.png"
-            alt="Logo"
-            className="h-24 mb-2 drop-shadow-glow"
-          />
-          <div className="text-lg font-bold text-white mt-2">
-            {localStorage.getItem("username") || (role === "admin" ? "Admin" : "User")}
+          <div className="flex items-center gap-2 mb-2">
+            <img src="/assets/logo1.png" alt="Logo" className="h-12 w-12 rounded-full shadow" />
+            <span className="text-2xl font-extrabold tracking-wide text-[#00ADB5]"> CRM</span>
           </div>
-          <div className="text-xs text-purple-300 font-semibold">
-            {role === "admin" ? "Admin" : "User"}
+          <div className="flex flex-col items-center mt-2">
+            <img src="https://randomuser.me/api/portraits/men/32.jpg" alt="avatar" className="h-14 w-14 rounded-full border-2 border-[#00ADB5] shadow" />
+            <div className="text-base font-bold text-white mt-2">{username}</div>
+            <div className="text-xs text-[#00ADB5] font-semibold">{role.charAt(0).toUpperCase() + role.slice(1)}</div>
           </div>
         </div>
         {/* Navigation */}
-        <nav className="flex-1 space-y-3 text-base font-medium">
+        <nav className="flex-1 space-y-2 text-base font-medium">
           {[
-            sidebarLinks[0],
-            ...sidebarLinks.slice(1).sort((a, b) => a.label.localeCompare(b.label)),
-          ].map((item, idx) => {
-            const isActive =
-              (item.to === "/dashboard" && activeTab === "dashboard") ||
-              (item.to !== "/dashboard" && item.to === `/${activeTab}`);
+            { to: "/dashboard", label: "Dashboard", icon: <FiBarChart2 /> },
+            { to: "/analytics", label: "Analytics", icon: <FiPieChart /> },
+            { to: "/reports", label: "Reports", icon: <FiFileText /> },
+            { to: "/contacts", label: "Contacts", icon: <FiUser /> },
+            { to: "/activity", label: "Activity Tracker", icon: <FiActivity /> },
+            { to: "/compliances", label: "Compliances", icon: <FiTrendingUp /> },
+            { to: "/companies", label: "Companies", icon: <FiUsers /> },
+            { to: "/notifications", label: "Notifications", icon: <FiBell /> },
+            { to: "/pipeline", label: "Lead Status Pipeline", icon: <FiTrendingUp /> },
+            { to: "/reminders", label: "Reminders", icon: <FiMessageCircle /> },
+          ].map((item) => {
+            const isActive = (item.to === "/dashboard" && activeTab === "dashboard") || (item.to !== "/dashboard" && item.to === `/${activeTab}`);
             return (
               <button
                 key={item.to}
@@ -228,238 +206,242 @@ const Dashboard = () => {
                   if (item.to === "/dashboard") navigate("/dashboard");
                 }}
                 className={
-                  "relative flex items-center gap-3 px-4 py-2 rounded-xl transition-all duration-300 font-semibold group overflow-hidden " +
-                  (isActive
-                    ? "sidebar-active-glow bg-gradient-to-r from-pink-500 to-purple-600 text-white scale-105 shadow-xl"
-                    : "hover:bg-[#232946] hover:text-pink-400 text-purple-200")
+                  "flex items-center gap-3 px-4 py-2 rounded-lg transition-all duration-200 font-semibold " +
+                  (isActive ? "bg-[#00ADB5] text-white shadow" : "hover:bg-[#FF5722] text-white")
                 }
+                style={isActive ? { boxShadow: '0 2px 8px 0 #00ADB5' } : {}}
               >
-                {/* Animated left bar for active */}
-                <span
-                  className={
-                    "absolute left-0 top-0 h-full w-1 rounded bg-gradient-to-b from-pink-400 to-purple-600 transition-all duration-300 " +
-                    (isActive ? "opacity-100" : "opacity-0 group-hover:opacity-60")
-                  }
-                ></span>
-                <span className="ml-2">{item.label}</span>
+                <span className="text-xl">{item.icon}</span>
+                <span>{item.label}</span>
               </button>
             );
           })}
-          {/* Logout Option */}
           <button
             onClick={() => {
               localStorage.clear();
               window.location.href = "/login";
             }}
-            className="block w-full mt-8 bg-gradient-to-r from-purple-600 to-pink-500 text-white font-bold py-2 rounded-xl shadow-lg hover:scale-105 transition-transform"
+            className="block w-full mt-8 bg-gradient-to-r from-[#00ADB5] to-[#FF5722] text-white font-bold py-2 rounded-xl shadow-lg hover:scale-105 transition-transform"
           >
             Logout
           </button>
         </nav>
-        {/* Sidebar Footer */}
-        <div className="mt-8 pt-6 border-t border-purple-900 flex flex-col items-center">
-          <button
-            className="flex items-center gap-2 px-3 py-1 rounded-lg bg-[#232946] text-purple-200 hover:bg-purple-700 hover:text-white transition"
-          >
-            <span className="text-lg">🌗</span>
-            <span className="text-xs font-semibold">Theme</span>
-          </button>
-          <div className="text-xs text-purple-700 mt-4">© 2025 CMR</div>
+        {/* Sidebar Footer Illustration */}
+        <div className="mt-8 pt-6 border-t border-[#00ADB5] flex flex-col items-center">
+          <div className="w-32 h-20 bg-[#16213E] rounded-xl flex items-center justify-center mb-2">
+            <img src="/assets/logo.png" alt="CRM Graphic" className="h-12 w-12" />
+          </div>
+          <div className="text-xs text-[#00ADB5] mt-2 font-semibold">CRM made friendly</div>
         </div>
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 bg-gradient-to-br from-[#232946]/60 to-[#0f2027]/80 p-10 overflow-y-auto">
-        {/* Global Search Bar */}
-        <div className="w-full max-w-2xl mx-auto mb-8">
-          <input
-            type="text"
-            placeholder="Search company, standard, year, reminders, etc..."
-            className="w-full p-3 rounded-lg bg-[#232946] text-sm text-white placeholder-gray-400 border border-[#2c5364] focus:outline-none focus:ring-2 focus:ring-blue-400 transition"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+  <main className="flex-1 bg-gradient-to-br from-[#1A1A2E] via-[#16213E] to-[#0F3460] p-0 overflow-y-auto">
+        {/* Top Header Bar */}
+  <header className="flex items-center justify-between px-10 py-6 border-b border-[#00ADB5] bg-gradient-to-r from-[#16213E] to-[#0F3460] text-white backdrop-blur-md sticky top-0 z-10 shadow-lg">
+          <div className="flex-1 max-w-lg relative">
+            <input
+              type="text"
+              placeholder="Global Search..."
+              className="w-full px-5 py-3 rounded-full bg-[#16213E]/80 border border-[#00ADB5] text-base text-white placeholder-[#B8C1EC] focus:outline-none focus:ring-2 focus:ring-[#00ADB5]"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{ fontFamily: 'Inter, Poppins, sans-serif' }}
+            />
+            {search && (
+              <div className="absolute left-0 right-0 mt-2 bg-[#232946] rounded-xl shadow-lg z-50 p-4 border border-[#00ADB5] max-h-96 overflow-y-auto">
+                {loadingSearch ? (
+                  <div className="text-center text-purple-300">Searching...</div>
+                ) : (
+                  Object.entries(globalResults).length > 0 ? (
+                    Object.entries(globalResults).map(([type, results]) =>
+                      results.length > 0 ? (
+                        <div key={type} className="mb-4">
+                          <div className="text-[#00ADB5] font-bold mb-2 text-lg">{type.charAt(0).toUpperCase() + type.slice(1)}</div>
+                          <ul className="space-y-2">
+                            {results.slice(0, 5).map((item, idx) => (
+                              <li key={idx} className="bg-[#16213E]/60 rounded px-3 py-2 text-sm text-white">
+                                {type === 'company' && (
+                                  <span>Name: <span className="font-bold">{item.name}</span> | Industry: {item.industry}</span>
+                                )}
+                                {type === 'contact' && (
+                                  <span>Name: <span className="font-bold">{item.name}</span> | Email: {item.email} | Company: {item.company}</span>
+                                )}
+                                {type === 'lead' && (
+                                  <span>Name: <span className="font-bold">{item.name}</span> | Status: {item.status} | Company: {item.company}</span>
+                                )}
+                                {type === 'report' && (
+                                  <span>Company: <span className="font-bold">{item.company}</span> | Year: {item.year} | ESG: {item.esg_score}</span>
+                                )}
+                                {type === 'compliance' && (
+                                  <span>Name: <span className="font-bold">{item.name}</span> | Status: {item.status}</span>
+                                )}
+                              </li>
+                            ))}
+                            {results.length > 5 && (
+                              <li className="text-xs text-[#B8C1EC]">...and {results.length - 5} more</li>
+                            )}
+                          </ul>
+                        </div>
+                      ) : null
+                    )
+                  ) : (
+                    <div className="text-center text-purple-300">No results found.</div>
+                  )
+                )}
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-6 ml-8">
+            <button className="relative text-2xl text-[#00ADB5] hover:text-[#FF5722]">
+              <FiBell />
+              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-[#6A5ACD] rounded-full border-2 border-white"></span>
+            </button>
+            <button className="text-2xl text-[#00ADB5] hover:text-[#FF5722]">
+              <FiMessageCircle />
+            </button>
+            <button className="text-2xl text-[#00ADB5] hover:text-[#FF5722]">
+              <FiSettings />
+            </button>
+            <img src="https://randomuser.me/api/portraits/men/32.jpg" alt="avatar" className="h-10 w-10 rounded-full border-2 border-[#00ADB5] shadow" />
+          </div>
+        </header>
+        {/* Main Content Grid */}
+        <div className="p-10">
+          {activeTab === "dashboard" ? (
+            <>
+              {/* Top Row: KPI Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
+                {/* KPI Card 1 */}
+                <div className="bg-gradient-to-br from-[#16213E] to-[#0F3460] rounded-2xl shadow-xl p-6 flex flex-col gap-2 min-h-[140px] border border-[#00ADB5] text-white">
+                  <div className="flex items-center gap-2 mb-2">
+                    <FiDollarSign className="text-2xl text-[#00ADB5]" />
+                    <span className="text-xs font-semibold text-[#00ADB5]">Total Revenue</span>
+                  </div>
+                  <span className="text-3xl font-extrabold text-white">${kpiData.revenue}</span>
+                  <span className="text-xs text-[#B8C1EC]">This year</span>
+                </div>
+                {/* KPI Card 2 */}
+                <div className="bg-gradient-to-br from-[#16213E] to-[#0F3460] rounded-2xl shadow-xl p-6 flex flex-col gap-2 min-h-[140px] border border-[#00ADB5] text-white">
+                  <div className="flex items-center gap-2 mb-2">
+                    <FiUsers className="text-2xl text-[#00ADB5]" />
+                    <span className="text-xs font-semibold text-[#00ADB5]">New Leads</span>
+                  </div>
+                  <span className="text-3xl font-extrabold text-white">{kpiData.leads}</span>
+                  <span className="text-xs text-[#B8C1EC]">This month</span>
+                </div>
+                {/* KPI Card 3 */}
+                <div className="bg-gradient-to-br from-[#16213E] to-[#0F3460] rounded-2xl shadow-xl p-6 flex flex-col gap-2 min-h-[140px] border border-[#00ADB5] text-white">
+                  <div className="flex items-center gap-2 mb-2">
+                    <FiTrendingUp className="text-2xl text-[#00ADB5]" />
+                    <span className="text-xs font-semibold text-[#00ADB5]">Conversion Rate</span>
+                  </div>
+                  <span className="text-3xl font-extrabold text-white">{kpiData.conversion}%</span>
+                  <span className="text-xs text-[#B8C1EC]">This quarter</span>
+                </div>
+                {/* KPI Card 4 */}
+                <div className="bg-gradient-to-br from-[#16213E] to-[#0F3460] rounded-2xl shadow-xl p-6 flex flex-col gap-2 min-h-[140px] border border-[#00ADB5] text-white">
+                  <div className="flex items-center gap-2 mb-2">
+                    <FiPieChart className="text-2xl text-[#00ADB5]" />
+                    <span className="text-xs font-semibold text-[#00ADB5]">Active Companies</span>
+                  </div>
+                  <span className="text-3xl font-extrabold text-white">{kpiData.companies}</span>
+                  <span className="text-xs text-[#B8C1EC]">Now</span>
+                </div>
+              </div>
+              {/* Second Row: Metric Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
+                <div className="bg-gradient-to-br from-[#16213E] to-[#0F3460] rounded-2xl shadow p-5 flex flex-col gap-2 min-h-[120px] border border-[#00ADB5] text-white">
+                  <span className="text-base font-semibold text-white">ESG Score</span>
+                  <span className="text-2xl font-bold text-[#00ADB5]">{metrics.esg}</span>
+                  <button className="mt-auto bg-gradient-to-r from-[#00ADB5] to-[#FF5722] text-white rounded-lg px-3 py-1 text-xs font-semibold">View</button>
+                </div>
+                <div className="bg-[#16213E] rounded-2xl shadow p-5 flex flex-col gap-2 min-h-[120px] border border-[#00ADB5] text-white">
+                  <span className="text-base font-semibold text-white">Pending Tasks</span>
+                  <span className="text-2xl font-bold text-[#00ADB5]">{metrics.tasks}</span>
+                  <button className="mt-auto bg-gradient-to-r from-[#00ADB5] to-[#FF5722] text-white rounded-lg px-3 py-1 text-xs font-semibold">View</button>
+                </div>
+                <div className="bg-[#16213E] rounded-2xl shadow p-5 flex flex-col gap-2 min-h-[120px] border border-[#00ADB5] text-white">
+                  <span className="text-base font-semibold text-white">Compliance Rate</span>
+                  <span className="text-2xl font-bold text-[#00ADB5]">{metrics.compliance}%</span>
+                  <button className="mt-auto bg-gradient-to-r from-[#00ADB5] to-[#FF5722] text-white rounded-lg px-3 py-1 text-xs font-semibold">View</button>
+                </div>
+                <div className="bg-[#16213E] rounded-2xl shadow p-5 flex flex-col gap-2 min-h-[120px] border border-[#00ADB5] text-white">
+                  <span className="text-base font-semibold text-white">Open Tickets</span>
+                  <span className="text-2xl font-bold text-[#00ADB5]">{metrics.tickets}</span>
+                  <button className="mt-auto bg-gradient-to-r from-[#00ADB5] to-[#FF5722] text-white rounded-lg px-3 py-1 text-xs font-semibold">View</button>
+                </div>
+              </div>
+              {/* Third Row: Data Visualization Charts */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
+                {/* Bar Chart 1 */}
+                <div className="bg-[#16213E] rounded-2xl shadow p-6 border border-[#00ADB5]">
+                  <span className="text-base font-semibold text-white mb-2 block">Leads by Source</span>
+                  {eventsChartData && eventsChartData.labels && eventsChartData.labels.length > 0 && eventsChartData.datasets && eventsChartData.datasets.length > 0 ? (
+                    <Line data={eventsChartData} options={eventsChartOptions} height={120} />
+                  ) : (
+                    <div className="text-[#B8C1EC] text-sm py-8 text-center">No event data available</div>
+                  )}
+                </div>
+                {/* Bar Chart 2 */}
+                <div className="bg-[#16213E] rounded-2xl shadow p-6 border border-[#00ADB5]">
+                  <span className="text-base font-semibold text-white mb-2 block">Revenue Trend</span>
+                  {salesChartData && salesChartData.labels && salesChartData.labels.length > 0 && salesChartData.datasets && salesChartData.datasets.length > 0 ? (
+                    <Line data={salesChartData} options={salesChartOptions} height={120} />
+                  ) : (
+                    <div className="text-[#B8C1EC] text-sm py-8 text-center">No sales data available</div>
+                  )}
+                </div>
+                {/* Area Chart */}
+                <div className="bg-[#16213E] rounded-2xl shadow p-6 border border-[#00ADB5]">
+                  <span className="text-base font-semibold text-white mb-2 block">Engagement</span>
+                  {salesChartData && salesChartData.labels && salesChartData.labels.length > 0 && salesChartData.datasets && salesChartData.datasets.length > 0 ? (
+                    <Line data={salesChartData} options={{ ...salesChartOptions, elements: { line: { fill: true, backgroundColor: 'rgba(106,90,205,0.15)' } } }} height={120} />
+                  ) : (
+                    <div className="text-[#B8C1EC] text-sm py-8 text-center">No engagement data available</div>
+                  )}
+                </div>
+              </div>
+              {/* Bottom Row: Mixed Content Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
+                {/* Large Dollar Card */}
+                <div className="bg-[#16213E] rounded-2xl shadow p-8 flex flex-col items-center justify-center min-h-[120px] border border-[#00ADB5]">
+                  <span className="text-4xl font-extrabold text-[#00ADB5]">${kpiData.outstandingPayments || 0}</span>
+                  <span className="text-xs text-[#B8C1EC] mt-2">Outstanding Payments</span>
+                </div>
+                {/* Recent Activity Feed */}
+                <div className="bg-[#16213E] rounded-2xl shadow p-6 min-h-[120px] border border-[#00ADB5]">
+                  <span className="text-base font-semibold text-white mb-2 block">Recent Activity</span>
+                  <ul className="space-y-2 mt-2">
+                    {(globalResults.activities || []).length === 0 ? (
+                      <li className="text-xs text-[#B8C1EC]">No recent activities.</li>
+                    ) : (
+                      (globalResults.activities || []).map((a, i) => (
+                        <li key={i} className="flex items-center gap-2">
+                          <img src={`https://randomuser.me/api/portraits/men/${32 + i}.jpg`} alt="avatar" className="h-7 w-7 rounded-full border border-[#E6E6FA]" />
+                          <span className="font-semibold text-white">{a.title}</span>
+                          <span className="text-xs text-[#B8C1EC] ml-auto">{a.timestamp}</span>
+                        </li>
+                      ))
+                    )}
+                  </ul>
+                </div>
+                {/* Text-based Report Card */}
+                <div className="bg-[#16213E] rounded-2xl shadow p-6 min-h-[120px] flex flex-col border border-[#00ADB5]">
+                  <span className="text-base font-semibold text-white mb-2 block">Summary Report</span>
+                  <p className="text-sm text-[#B8C1EC] flex-1">{kpiData.summaryReport || "Your CRM is performing above industry average. Conversion rates are up this quarter. Keep up the great work!"}</p>
+                  <button className="mt-4 bg-gradient-to-r from-[#00ADB5] to-[#FF5722] text-white rounded-lg px-4 py-2 text-xs font-semibold self-end">Download</button>
+                </div>
+              </div>
+            </>
+          ) : (
+            activeModule && React.createElement(activeModule, { search })
+          )}
         </div>
-        {/* Render the selected module, or dashboard content if on dashboard */}
-        {activeTab === "dashboard" ? (
-          <>
-            {/* Welcome Banner */}
-            <div className="glass-card mb-8 flex items-center justify-between px-8 py-6 bg-gradient-to-r from-pink-500/30 to-purple-600/30 shadow-lg animate-fade-in">
-              <div>
-                <h2 className="text-2xl font-bold text-pink-300">
-                  <span>{typedText}</span>
-                  <span className="animate-pulse text-pink-400">|</span>
-                </h2>
-                <p className="text-purple-200 mt-1">
-                  Here's a quick overview of your platform today.
-                </p>
-              </div>
-              <span className="text-5xl animate-wiggle">🚀</span>
-            </div>
-
-            {/* Animated Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
-              <div className="glass-card flex flex-col items-center animate-fade-in">
-                <span className="text-4xl font-extrabold text-pink-400 animate-bounce">23,342</span>
-                <span className="text-lg text-purple-200 mt-2">Online Users</span>
-              </div>
-              <div className="glass-card flex flex-col items-center animate-fade-in">
-                <span className="text-4xl font-extrabold text-blue-400 animate-pulse">13,221</span>
-                <span className="text-lg text-purple-200 mt-2">Offline Users</span>
-              </div>
-              <div className="glass-card flex flex-col items-center animate-fade-in">
-                <span className="text-4xl font-extrabold text-yellow-300 animate-bounce">{marketingLeads}</span>
-                <span className="text-lg text-purple-200 mt-2">Marketing Leads</span>
-              </div>
-            </div>
-
-            {/* Dashboard Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 animate-fade-in">
-              {/* Performance Benchmarking (from Analytics) */}
-              <div className="glass-card">
-                <p className="text-lg font-semibold mb-2 text-purple-300">Performance Benchmarking</p>
-                <Line
-                  data={{
-                    labels: ["Industry Avg.", "Your Score", "Top Performer", "Peers Avg."],
-                    datasets: [
-                      {
-                        label: "Score (%)",
-                        data: [87, 92, 98, 85],
-                        backgroundColor: [
-                          "rgba(236, 72, 153, 0.5)",
-                          "rgba(59, 130, 246, 0.5)",
-                          "rgba(34, 197, 94, 0.5)",
-                          "rgba(253, 224, 71, 0.5)"
-                        ],
-                        borderColor: [
-                          "#ec4899",
-                          "#3b82f6",
-                          "#22c55e",
-                          "#fde047"
-                        ],
-                        borderWidth: 2,
-                        fill: true,
-                        tension: 0.4,
-                        pointRadius: 6,
-                        pointHoverRadius: 10,
-                      }
-                    ]
-                  }}
-                  options={{
-                    responsive: true,
-                    plugins: {
-                      legend: { display: false },
-                      tooltip: { enabled: true }
-                    },
-                    scales: {
-                      y: {
-                        beginAtZero: true,
-                        max: 100,
-                        ticks: { color: "#fff" },
-                        grid: { color: "#444" }
-                      },
-                      x: {
-                        ticks: { color: "#fff" },
-                        grid: { color: "#444" }
-                      }
-                    }
-                  }}
-                />
-              </div>
-              
-              {/* Events */}
-              <div className="glass-card">
-                <p className="text-lg font-semibold mb-2 text-purple-300">Events</p>
-                <Line data={eventsChartData} options={eventsChartOptions} />
-              </div>
-              
-              {/* Device Stats */}
-              <div className="glass-card space-y-2">
-                <p className="text-lg font-semibold text-purple-300">Device Stats</p>
-                <p>Uptime: <span className="text-purple-100">195 Days, 8 hours</span></p>
-                <p>First Seen: <span className="text-purple-100">23 Sep 2019, 2:04PM</span></p>
-                <p>Collected time: <span className="text-purple-100">23 Sep 2019, 2:04PM</span></p>
-                <p>Memory space: 168.3GB</p>
-                <div className="w-full h-2 bg-purple-900/30 rounded">
-                  <div className="h-full bg-gradient-to-r from-green-400 to-green-600 rounded w-5/6"></div>
-                </div>
-              </div>
-
-              {/* Reminders Card */}
-              <div className="glass-card">
-                <p className="text-lg font-semibold mb-2 text-purple-300">Reminders (Live)</p>
-                <ul className="mt-4 text-base space-y-1 text-purple-100">
-                  {filteredReminders.length === 0 ? (
-                    <li className="text-purple-400">No reminders found.</li>
-                  ) : (
-                    filteredReminders.map((rem, idx) => (
-                      <li key={idx}>
-                        <span className="font-bold text-pink-400">{rem.task}</span>
-                        <span className="ml-2 text-xs text-purple-200">({rem.due})</span>
-                      </li>
-                    ))
-                  )}
-                </ul>
-              </div>
-              {/* Real-Time Notifications & Alerts */}
-              <div className="glass-card">
-                <p className="text-lg font-semibold mb-2 text-purple-300">Real-Time Notifications & Alerts</p>
-                <ul className="text-base text-purple-100 space-y-1">
-                  {filteredNotifications.length === 0 ? (
-                    <li className="text-purple-400">No notifications found.</li>
-                  ) : (
-                    filteredNotifications.slice(0, 6).map((n, i) => (
-                      <li key={i}>
-                        <span className="font-bold text-pink-400">{n.type}:</span> {n.title}
-                        <span className="block text-xs text-purple-300">{n.timestamp}</span>
-                      </li>
-                    ))
-                  )}
-                </ul>
-                <Link to="/notifications" className="text-pink-400 hover:underline text-xs mt-2 block">View All</Link>
-              </div>
-
-              {/* Sales Analytics (visible to all) */}
-              <div className="glass-card">
-                <div className="flex justify-between items-center mb-2">
-                  <p className="text-lg font-semibold text-purple-300">Sales Analytics</p>
-                  <span className="text-xs text-purple-200">Month</span>
-                </div>
-                <p className="text-pink-400">Online: 23,342</p>
-                <p className="text-blue-400">Offline: 13,221</p>
-                <p className="text-yellow-300">Marketing: 1,542</p>
-                <Line data={salesChartData} options={salesChartOptions} />
-              </div>
-            </div>
-            {/* Removed Recent Activities and Admin-only Sales Analytics cards */}
-          </>
-        ) : (
-          activeModule && React.createElement(activeModule, { search })
-        )}
       </main>
       <style>{`
-        .glass-card {
-          background: rgba(36, 36, 62, 0.7);
-          border-radius: 1.5rem;
-          box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
-          backdrop-filter: blur(8px);
-          -webkit-backdrop-filter: blur(8px);
-          border: 1px solid rgba(255,255,255,0.18);
-          padding: 2rem;
-          margin-bottom: 2rem;
-          transition: box-shadow 0.3s, transform 0.3s;
-        }
-        .glass-card:hover {
-          box-shadow: 0 12px 40px 0 rgba(255, 0, 128, 0.35), 0 8px 32px 0 rgba(31, 38, 135, 0.47);
-          transform: translateY(-8px) scale(1.04) rotate(-1deg);
-          border-color: #e879f9;
-        }
-        .animate-fade-in {
-          animation: fadeIn 0.7s;
-        }
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(20px);}
-          to { opacity: 1; transform: none;}
+        body, html {
+          font-family: 'Inter', 'Poppins', sans-serif;
         }
         .sidebar-animate {
           animation: sidebarFadeIn 0.9s cubic-bezier(.4,2,.6,1) both;
@@ -468,31 +450,9 @@ const Dashboard = () => {
           from { opacity: 0; transform: translateX(-40px);}
           to { opacity: 1; transform: none;}
         }
-        .sidebar-active-glow {
-          box-shadow: 0 0 0 3px #a78bfa55, 0 0 16px #e879f9cc;
-          border: 2px solid #a78bfa;
-        }
-        .drop-shadow-glow {
-          filter: drop-shadow(0 0 8px #e879f9) drop-shadow(0 0 16px #a78bfa);
-        }
-        @keyframes profilePop {
-          0% { transform: scale(0.7); opacity: 0; }
-          100% { transform: scale(1); opacity: 1; }
-        }
-        .animate-profile-pop {
-          animation: profilePop 0.7s cubic-bezier(.4,2,.6,1) both;
-        }
-        @keyframes wiggle {
-          0%, 100% { transform: rotate(-3deg);}
-          50% { transform: rotate(3deg);}
-        }
-        .animate-wiggle {
-          animation: wiggle 1.2s infinite;
-        }
       `}</style>
     </div>
   );
 };
 
 export default Dashboard;
-

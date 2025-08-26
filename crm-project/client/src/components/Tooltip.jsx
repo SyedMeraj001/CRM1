@@ -13,7 +13,7 @@ export default function Tooltip({ children, text }) {
         <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 bg-gray-900 text-white text-xs px-3 py-1 rounded shadow-lg z-20 whitespace-nowrap">
           {text}
         </div>
-      )}
+      )}t78 9
     </div>
   );
 }

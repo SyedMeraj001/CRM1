@@ -42,9 +42,9 @@ export default function Login() {
     };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-tr from-[#0f2027] via-[#2c5364] to-[#24243e] font-sans text-white">
+  <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#1A1A2E] via-[#16213E] to-[#0F3460] p-8 text-white font-sans">
       <form
-        className="bg-[rgba(36,36,62,0.7)] rounded-3xl p-10 max-w-sm w-full shadow-xl glass-card border border-[rgba(255,255,255,0.18)]"
+        className="glass-card rounded-3xl p-10 max-w-sm w-full shadow-xl border border-[#FF5722]"
         onSubmit={handleLogin}
         style={{
           backdropFilter: "blur(8px)",
@@ -58,7 +58,7 @@ export default function Login() {
             className="h-12 drop-shadow-glow"
           />
         </div>
-        <h2 className="text-center text-2xl font-bold mb-4 text-pink-300">
+        <h2 className="text-center text-3xl font-extrabold mb-4 text-[#00ADB5] drop-shadow-lg">
           ESGenius
         </h2>
         <div className="flex justify-center mb-4 gap-4">
@@ -104,7 +104,7 @@ export default function Login() {
         />
         <button
           type="submit"
-          className="w-full bg-gradient-to-r from-purple-600 to-pink-500 text-white font-semibold py-2 rounded-xl shadow-lg hover:scale-105 transition-transform"
+          className="w-full bg-gradient-to-r from-[#00ADB5] to-[#FF5722] text-white font-bold py-2 rounded-xl shadow-lg hover:scale-105 transition-transform"
         >
           Login
         </button>
@@ -125,13 +125,19 @@ export default function Login() {
       </form>
       <style>{`
       .glass-card {
-        box-shadow: 0 8px 32px 0 rgba(31,38,135,0.37);
+        background: rgba(36, 36, 62, 0.7);
+        border-radius: 1.5rem;
+        box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        border: 1px solid rgba(255,255,255,0.18);
+        padding: 2rem;
+        margin-bottom: 2rem;
         transition: box-shadow 0.3s, transform 0.3s;
       }
       .glass-card:hover {
-        box-shadow: 0 12px 40px 0 rgba(255,0,128,0.35), 0 8px 32px 0 rgba(31,38,135,0.47);
-        transform: translateY(-8px) scale(1.04) rotate(-1deg);
-        border-color: #e879f9;
+        box-shadow: 0 12px 40px 0 rgba(255, 0, 128, 0.25), 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+        transform: translateY(-4px) scale(1.02);
       }
       .drop-shadow-glow {
         filter: drop-shadow(0 0 8px #e879f9) drop-shadow(0 0 16px #a78bfa);

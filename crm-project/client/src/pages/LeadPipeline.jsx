@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
+import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import confetti from "canvas-confetti";
 import { useNavigate } from "react-router-dom";
 import * as XLSX from "xlsx";
@@ -17,25 +17,11 @@ const USERS = ["Evan Morales", "Kenneth Osborne", "Ava Carter"];
 
 // Initial pipeline data
 const initialPipeline = {
-  lead: [
-    { id: "1", name: "Acme Corp", owner: "Evan Morales", details: "Eco solutions provider." },
-    { id: "2", name: "Beta Ltd", owner: "Ava Carter", details: "Clean tech startup." },
-  ],
-  contacted: [
-    { id: "3", name: "Gamma Inc", owner: "Kenneth Osborne", details: "Consulting firm." },
-  ],
-  client: [
-    { id: "4", name: "Delta LLC", owner: "Evan Morales", details: "Renewable energy leader." },
-  ],
+  lead: [],
+  contacted: [],
+  client: [],
   archived: [],
 };
-
-const leads = [
-  { status: "Marketing", name: "Lead 1" },
-  { status: "Sales", name: "Lead 2" },
-  { status: "Marketing", name: "Lead 3" },
-  // ...other leads
-];
 
 export default function LeadPipeline() {
   const [pipeline, setPipeline] = useState(initialPipeline);
@@ -76,6 +62,70 @@ export default function LeadPipeline() {
     });
 
     // Confetti when moved to Client
+
+  // ...other functions (handleFileUpload, divideLeads, assignUploadedLead, etc.)...
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-[#1A1A2E] via-[#16213E] to-[#0F3460] p-8 text-white">
+      <div className="max-w-5xl mx-auto">
+        <div className="mb-8">
+          <input
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={handleFileUpload}
+            className="mb-4"
+          />
+          {/* Auto-assign leads equally among users */}
+          <button
+            onClick={divideLeads}
+            className="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 mr-4"
+          >
+            Auto-Assign Equally
+          </button>
+        </div>
+        {/* Uploaded leads table with manual assignment */}
+        {leadsData.length > 0 && (
+          <div className="mb-8">
+            <h3 className="text-xl font-bold mb-4 text-[#00ADB5]">Uploaded Leads</h3>
+            <table className="min-w-full text-sm rounded-xl overflow-hidden shadow-xl glass-table">
+              <thead>
+                <tr className="bg-gradient-to-r from-[#23234e] via-[#1a1a2e] to-[#16213e] text-[#00ADB5] font-bold text-base">
+                  <th className="py-2 px-3">Name</th>
+                  <th className="py-2 px-3">Company</th>
+                  <th className="py-2 px-3">Status</th>
+                  <th className="py-2 px-3">Owner</th>
+                  <th className="py-2 px-3">Manual Assign</th>
+                </tr>
+              </thead>
+              <tbody>
+                {leadsData.map((lead, idx) => (
+                  <tr key={idx} className="border-t">
+                    <td className="py-2 px-3">{lead.name}</td>
+                    <td className="py-2 px-3">{lead.company || '-'}</td>
+                    <td className="py-2 px-3">{lead.status || '-'}</td>
+                    <td className="py-2 px-3">{lead.owner || '-'}</td>
+                    <td className="py-2 px-3">
+                      <select
+                        value={lead.owner || ''}
+                        onChange={e => assignUploadedLead(idx, e.target.value)}
+                        className="p-2 rounded bg-white/10 text-white border border-blue-700 focus:outline-none"
+                      >
+                        <option value="">Select User</option>
+                        {usersToDivide.map(user => (
+                          <option key={user} value={user}>{user}</option>
+                        ))}
+                      </select>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {/* ...existing code... */}
+      </div>
+    </div>
+  );
     if (destination.droppableId === "client") {
       confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 } });
       const audio = new Audio("https://assets.mixkit.co/sfx/preview/mixkit-bell-notification-933.mp3");
@@ -103,6 +153,20 @@ export default function LeadPipeline() {
       owner: usersToDivide[idx % usersToDivide.length],
     }));
     setLeads(divided);
+    // Also update pipeline state so leads appear in correct columns
+    const newPipeline = {
+      lead: [],
+      contacted: [],
+      client: [],
+      archived: [],
+    };
+    divided.forEach(lead => {
+      const status = lead.status || 'lead';
+      if (newPipeline[status]) {
+        newPipeline[status].push(lead);
+      }
+    });
+    setPipeline(newPipeline);
   }
 
   // Manually assign a lead to a user
@@ -199,12 +263,12 @@ export default function LeadPipeline() {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-tr from-[#232946]/80 to-[#0f2027]/90 p-8 text-white">
+  <div className="min-h-screen bg-gradient-to-br from-[#1A1A2E] via-[#16213E] to-[#0F3460] p-8 text-white font-sans">
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-pink-400 flex items-center">
+        <h2 className="text-3xl font-extrabold text-[#00ADB5] flex items-center tracking-tight drop-shadow-lg">
           Lead Status Pipeline
         </h2>
-        <div className="flex gap-4 items-center">
+  <div className="flex gap-4 items-center">
           {role === "admin" && (
             <>
               <label className="flex flex-col items-center justify-center cursor-pointer w-40 h-12">
@@ -242,7 +306,7 @@ export default function LeadPipeline() {
           placeholder="Search leads..."
           value={searchTerm}
           onChange={e => setSearchTerm(e.target.value)}
-          className="px-4 py-2 rounded bg-[#232946] text-purple-100 w-64"
+          className="px-4 py-2 rounded bg-[#16213E] text-white border border-[#00ADB5] w-64 placeholder-[#B8C1EC] focus:outline-none shadow"
         />
       </div>
 
@@ -317,20 +381,20 @@ export default function LeadPipeline() {
         </div>
       )}
 
-      <div className="p-6 bg-gradient-to-tr from-[#232946]/80 to-[#0f2027]/90 rounded-3xl shadow-2xl">
+  <div className="p-6 bg-gradient-to-br from-[#1A1A2E] via-[#16213E] to-[#0F3460] rounded-3xl shadow-2xl">
         {/* Pipeline Analytics */}
         <div className="mb-6 flex gap-6 items-center">
           <div className="glass-card flex flex-col items-center justify-center px-6 py-4">
-            <span className="text-lg font-bold text-pink-400">Conversion Rate</span>
-            <span className="text-3xl font-bold text-green-400">{conversionRate}%</span>
+            <span className="text-lg font-bold text-[#00ADB5]">Conversion Rate</span>
+            <span className="text-3xl font-bold text-[#FF5722]">{conversionRate}%</span>
           </div>
           <div className="glass-card flex flex-col items-center justify-center px-6 py-4">
-            <span className="text-lg font-bold text-pink-400">Clients</span>
-            <span className="text-3xl font-bold text-purple-400">{clientCount}</span>
+            <span className="text-lg font-bold text-[#00ADB5]">Clients</span>
+            <span className="text-3xl font-bold text-[#00ADB5]">{clientCount}</span>
           </div>
           <button
             onClick={addStage}
-            className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded shadow font-bold"
+            className="bg-gradient-to-r from-[#00ADB5] to-[#FF5722] text-white px-4 py-2 rounded shadow font-bold"
           >
             + Add Stage
           </button>
@@ -347,7 +411,7 @@ export default function LeadPipeline() {
                   >
                     <div className="flex items-center gap-2 mb-4">
                       <span className={`w-3 h-3 rounded-full ${status.color} inline-block`}></span>
-                      <span className="font-semibold text-purple-200">{status.label}</span>
+                      <span className="font-semibold text-[#00ADB5] text-lg drop-shadow">{status.icon} {status.label}</span>
                     </div>
                     <div className="space-y-4 min-h-[60px]">
                       {pipeline[status.key]?.map((card, idx) => (
@@ -357,13 +421,13 @@ export default function LeadPipeline() {
                               ref={provided.innerRef}
                               {...provided.draggableProps}
                               {...provided.dragHandleProps}
-                              className={`rounded-xl p-4 bg-gradient-to-br from-[#232946]/80 to-[#2c5364]/80 shadow-md border-l-4 ${status.color} transition-all ${
+                              className={`rounded-xl p-4 bg-gradient-to-br from-[#16213E] via-[#0F3460] to-[#232946] shadow-md border-l-4 ${status.color} transition-all ${
                                 snapshot.isDragging ? "scale-105 shadow-2xl animate-bounce" : ""
                               }`}
                             >
                               <div className="flex justify-between items-center mb-2">
                                 <span
-                                  className="font-bold text-white cursor-pointer hover:text-pink-400"
+                                  className="font-bold text-[#00ADB5] cursor-pointer hover:text-[#FF5722] text-lg drop-shadow"
                                   onClick={() => openDrawer(card, status.key)}
                                 >
                                   {card.name}
@@ -371,11 +435,11 @@ export default function LeadPipeline() {
                                 <span title={status.label}>{status.icon}</span>
                               </div>
                               <div className="flex items-center justify-between">
-                                <span className="text-xs text-purple-200">
-                                  Owner: <span className="font-semibold">{card.owner}</span>
+                                <span className="text-xs text-[#B8C1EC]">
+                                  Owner: <span className="font-semibold text-white">{card.owner}</span>
                                 </span>
                                 <button
-                                  className="text-xs text-pink-400 hover:underline"
+                                  className="text-xs text-[#FF5722] hover:underline font-bold"
                                   onClick={() =>
                                     setAssignModal({ open: true, card, status: status.key })
                                   }
@@ -475,6 +539,3 @@ export default function LeadPipeline() {
   );
 }
 
-export const getMarketingLeadsCount = () => {
-  return leads.filter(lead => lead.status === "Marketing").length;
-};

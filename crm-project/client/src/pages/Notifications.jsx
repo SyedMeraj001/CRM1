@@ -1,38 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
+import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import confetti from "canvas-confetti";
-
-// Simulated notifications data
-const initialNotifications = [
-	{
-		id: 1,
-		type: "report",
-		message: "New report uploaded: Q2 Financials",
-		time: "Just now",
-		read: false,
-	},
-	{
-		id: 2,
-		type: "reminder",
-		message: "Reminder due: Call Client",
-		time: "2 min ago",
-		read: false,
-	},
-	{
-		id: 3,
-		type: "company",
-		message: "Company status changed: Acme Corp → Client",
-		time: "10 min ago",
-		read: false,
-	},
-	{
-		id: 4,
-		type: "reminder",
-		message: "Send ESG Update - 2 days left",
-		time: "1 hr ago",
-		read: true,
-	},
-];
 
 // NotificationBadge component
 function NotificationBadge({ count }) {
@@ -40,10 +9,11 @@ function NotificationBadge({ count }) {
 	useEffect(() => {
 		if (count > 0 && badgeRef.current) {
 			badgeRef.current.classList.add("animate-bounce");
-			setTimeout(
-				() => badgeRef.current.classList.remove("animate-bounce"),
-				600
-			);
+			setTimeout(() => {
+				if (badgeRef.current) {
+					badgeRef.current.classList.remove("animate-bounce");
+				}
+			}, 600);
 		}
 	}, [count]);
 	if (!count) return null;
@@ -57,7 +27,6 @@ function NotificationBadge({ count }) {
 	);
 }
 
-// LiveAlertToast component
 function LiveAlertToast({ alert, onClose }) {
 	useEffect(() => {
 		if (alert) {
@@ -83,7 +52,6 @@ function LiveAlertToast({ alert, onClose }) {
 	);
 }
 
-// ReminderScheduler component
 function ReminderScheduler({ show, value, onChange, onSchedule, onCancel }) {
 	if (!show) return null;
 	return (
@@ -118,86 +86,80 @@ function ReminderScheduler({ show, value, onChange, onSchedule, onCancel }) {
 	);
 }
 
-export default function Notifications() {
-	const [notifications, setNotifications] = useState(initialNotifications);
+function Notifications() {
+	const [notifications, setNotifications] = useState([]);
 	const [showScheduler, setShowScheduler] = useState(false);
 	const [newReminder, setNewReminder] = useState("");
 	const [liveAlert, setLiveAlert] = useState(null);
 	const navigate = useNavigate();
 
-	// Simulate live notification (demo purpose)
-	useEffect(() => {
-		const timer = setTimeout(() => {
-			const alertMsg = "Follow-up: Email sent to Beta Ltd";
-			setNotifications((prev) => [
-				{
-					id: Date.now(),
-					type: "reminder",
-					message: alertMsg,
-					time: "Just now",
-					read: false,
-				},
-				...prev,
-			]);
-			setLiveAlert(alertMsg);
-			// Simulate backend email alert
-			// fetch("/api/send-email", { method: "POST", body: JSON.stringify({ message: alertMsg }) });
-		}, 15000);
-		return () => clearTimeout(timer);
-	}, []);
-
-	// Mark notification as read
-	const markAsRead = (id) => {
-		setNotifications((prev) =>
-			prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-		);
+	// Fetch notifications from backend
+	const fetchNotifications = async () => {
+		try {
+			const res = await axios.get("/api/notifications");
+			setNotifications(res.data);
+		} catch (err) {
+			console.error("Failed to fetch notifications", err);
+		}
 	};
 
-	// Add new reminder
-	const addReminder = () => {
+	useEffect(() => {
+		fetchNotifications();
+	}, []);
+
+	// Mark notification as read (PUT to backend)
+	const markAsRead = async (id) => {
+		try {
+			await axios.put(`/api/notifications/${id}`, { read: true });
+			fetchNotifications();
+		} catch (err) {
+			console.error("Failed to mark as read", err);
+		}
+	};
+
+	// Add new reminder (POST to backend)
+	const addReminder = async () => {
 		if (newReminder.trim()) {
-			setNotifications((prev) => [
-				{
-					id: Date.now(),
+			try {
+				await axios.post("/api/notifications", {
 					type: "reminder",
 					message: `Reminder scheduled: ${newReminder}`,
-					time: "Just now",
 					read: false,
-				},
-				...prev,
-			]);
-			setLiveAlert(`Reminder scheduled: ${newReminder}`);
-			setNewReminder("");
-			setShowScheduler(false);
-			// Simulate backend email alert
-			// fetch("/api/send-email", { method: "POST", body: JSON.stringify({ message: newReminder }) });
+				});
+				setLiveAlert(`Reminder scheduled: ${newReminder}`);
+				setNewReminder("");
+				setShowScheduler(false);
+				fetchNotifications();
+			} catch (err) {
+				console.error("Failed to add reminder", err);
+			}
 		}
 	};
 
 	// Count unread notifications
 	const unreadCount = notifications.filter((n) => !n.read).length;
 
-	return (
-		<div className="min-h-screen bg-gradient-to-tr from-[#232946]/80 to-[#0f2027]/90 p-8 text-white">
+		return (
+			<div className="min-h-screen bg-gradient-to-br from-[#1A1A2E] via-[#16213E] to-[#0F3460] p-8 text-white">
 			<div className="max-w-2xl mx-auto">
-				<div className="flex justify-between items-center mb-6">
-					<h2 className="text-2xl font-bold text-pink-400 mb-6 flex items-center">
-						Real-Time Notifications & Alerts
-						<NotificationBadge count={unreadCount} />
-					</h2>
-				</div>
-				<div className="flex justify-between items-center mb-6">
-					<span className="text-lg font-semibold text-purple-200">
-						Live Notifications
-					</span>
-					<button
-						onClick={() => setShowScheduler(true)}
-						className="bg-pink-500 hover:bg-pink-600 px-4 py-2 rounded text-white font-bold shadow"
-					>
-						+ Schedule Reminder
-					</button>
-				</div>
-				<ul className="space-y-4">
+								<div className="flex justify-between items-center mb-6">
+									<h2 className="text-3xl font-extrabold text-[#00ADB5] drop-shadow-lg flex items-center">
+										Real-Time Notifications & Alerts
+										<NotificationBadge count={unreadCount} />
+									</h2>
+								</div>
+								<div className="flex justify-between items-center mb-6 glass-card border border-[#FF5722] shadow-xl rounded-2xl">
+									<span className="text-xl font-bold text-[#FF5722]">
+										Live Notifications
+									</span>
+									<button
+										onClick={() => setShowScheduler(true)}
+										className="bg-gradient-to-r from-[#00ADB5] to-[#FF5722] hover:from-[#00ADB5] hover:to-[#FF5722] text-white px-6 py-2 rounded-full font-bold shadow transition"
+									>
+										+ Schedule Reminder
+									</button>
+								</div>
+								<ul className="space-y-4 glass-card border border-[#00ADB5] shadow-xl rounded-2xl">
 					{notifications.map((n, idx) => (
 						<li
 							key={n.id}
@@ -216,7 +178,9 @@ export default function Notifications() {
 									{n.type === "reminder" && "⏰ "}
 									{n.type === "company" && "🏢 "}
 								</span>
-								{n.message}
+												{n.type === "reminder" && n.title && n.message
+													? (<span>{n.message}<br /><span className="text-xs text-yellow-300">Task: {n.title}</span></span>)
+													: n.message}
 								<div className="text-xs text-purple-200 mt-1">
 									{n.time}
 								</div>
@@ -247,44 +211,46 @@ export default function Notifications() {
 			/>
 
 			<style>{`
-        .animate-fade-in {
-          animation: fadeIn 0.7s;
-        }
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(-10px);}
-          to { opacity: 1; transform: none;}
-        }
-        .animate-bounce {
-          animation: bounce 0.6s;
-        }
-        @keyframes bounce {
-          0%, 100% { transform: translateY(0);}
-          50% { transform: translateY(-8px);}
-        }
-        .animate-slide-in {
-          animation: slideIn 0.5s both;
-        }
-        @keyframes slideIn {
-          from { opacity: 0; transform: translateX(40px);}
-          to { opacity: 1; transform: none;}
-        }
-        .glass-card {
-          background: rgba(36, 36, 62, 0.7);
-          border-radius: 1.5rem;
-          box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
-          backdrop-filter: blur(8px);
-          -webkit-backdrop-filter: blur(8px);
-          border: 1px solid rgba(255,255,255,0.18);
-          padding: 2rem;
-          margin-bottom: 2rem;
-          transition: box-shadow 0.3s, transform 0.3s;
-        }
-        .glass-card:hover {
-          box-shadow: 0 12px 40px 0 rgba(255, 0, 128, 0.25), 0 8px 32px 0 rgba(31, 38, 135, 0.37);
-          transform: translateY(-4px) scale(1.02);
-        }
-      `}</style>
+		.animate-fade-in {
+		  animation: fadeIn 0.7s;
+		}
+		@keyframes fadeIn {
+		  from { opacity: 0; transform: translateY(-10px);}
+		  to { opacity: 1; transform: none;}
+		}
+		.animate-bounce {
+		  animation: bounce 0.6s;
+		}
+		@keyframes bounce {
+		  0%, 100% { transform: translateY(0);}
+		  50% { transform: translateY(-8px);}
+		}
+		.animate-slide-in {
+		  animation: slideIn 0.5s both;
+		}
+		@keyframes slideIn {
+		  from { opacity: 0; transform: translateX(40px);}
+		  to { opacity: 1; transform: none;}
+		}
+		.glass-card {
+		  background: rgba(36, 36, 62, 0.7);
+		  border-radius: 1.5rem;
+		  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+		  backdrop-filter: blur(8px);
+		  -webkit-backdrop-filter: blur(8px);
+		  border: 1px solid rgba(255,255,255,0.18);
+		  padding: 2rem;
+		  margin-bottom: 2rem;
+		  transition: box-shadow 0.3s, transform 0.3s;
+		}
+		.glass-card:hover {
+		  box-shadow: 0 12px 40px 0 rgba(255, 0, 128, 0.25), 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+		  transform: translateY(-4px) scale(1.02);
+		}
+	  `}</style>
 		</div>
 	);
 }
+
+export default Notifications;
 

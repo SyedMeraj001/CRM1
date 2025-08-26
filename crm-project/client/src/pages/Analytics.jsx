@@ -6,33 +6,8 @@ import Papa from "papaparse";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
 import { useNavigate } from "react-router-dom";
+import axios from "axios";
 
-// Dummy data for demonstration
-const COMPANIES = ["Dept A", "Dept B", "Dept C", "Dept D"];
-const ESG_CATEGORIES = ["Environment", "Social", "Governance"];
-const COLORS = ["#2563eb", "#10b981", "#f59e42", "#f87171"];
-const sampleRisk = [
-  { name: "Low", value: 60 },
-  { name: "Medium", value: 30 },
-  { name: "High", value: 10 },
-];
-export const sampleTrend = [
-  { period: "2024-07", value: 110 },
-  { period: "2024-08", value: 120 },
-  { period: "2024-09", value: 130 },
-  { period: "2024-10", value: 140 },
-  { period: "2024-11", value: 135 },
-  { period: "2024-12", value: 145 },
-  { period: "2025-01", value: 150 },
-  { period: "2025-02", value: 155 },
-  { period: "2025-03", value: 160 },
-  { period: "2025-04", value: 170 },
-  { period: "2025-05", value: 175 },
-  { period: "2025-06", value: 180 },
-  { period: "2025-07", value: 185 },
-];
-
-// 1. Use a consistent color palette
 const PALETTE = {
   cyan: "text-cyan-400",
   green: "text-green-400",
@@ -48,6 +23,8 @@ const PALETTE = {
   borderRed: "border-red-500",
 };
 
+// These will be replaced by backend data
+const ESG_CATEGORIES = ["Environment", "Social", "Governance"];
 const REGIONS = ["North", "South", "East", "West"];
 
 function Modal({ children, onClose }) {
@@ -66,6 +43,16 @@ function Modal({ children, onClose }) {
   );
 }
 
+
+export const sampleTrend = [
+  { period: "Jan", value: 120 },
+  { period: "Feb", value: 150 },
+  { period: "Mar", value: 170 },
+  { period: "Apr", value: 140 },
+  { period: "May", value: 180 },
+  { period: "Jun", value: 200 },
+];
+
 const samplePerformance = [
   { name: "Dept A", score: 85, category: "Environment", risk: "Low", region: "North" },
   { name: "Dept B", score: 72, category: "Social", risk: "Medium", region: "South" },
@@ -81,17 +68,18 @@ export default function Analytics({ search = "" }) {
   const [dateRange, setDateRange] = useState({ from: "", to: "" });
   const [regionFilter, setRegionFilter] = useState("");
   // Data
-  const [performance, setPerformance] = useState(samplePerformance);
-  const [risk, setRisk] = useState(sampleRisk);
-  const [trend, setTrend] = useState(sampleTrend);
+  const [companies, setCompanies] = useState([]);
+  const [performance, setPerformance] = useState([]);
+  const [risk, setRisk] = useState([]);
+  const [trend, setTrend] = useState([]);
   // KPI
   const [kpi, setKpi] = useState({
-    totalCompanies: 4,
-    avgEsg: 80.5,
-    highRisk: 1,
-    reportsThisMonth: 3,
-    yoyChange: 8,
-    momChange: 3,
+    totalCompanies: 0,
+    avgEsg: 0,
+    highRisk: 0,
+    reportsThisMonth: 0,
+    yoyChange: 0,
+    momChange: 0,
   });
   // UI
   const [autoRefresh, setAutoRefresh] = useState(false);
@@ -102,12 +90,31 @@ export default function Analytics({ search = "" }) {
   const [activityLog, setActivityLog] = useState([]);
   const autoRefreshRef = useRef();
 
+
+  // Fetch analytics data from backend
+  const fetchAnalytics = async () => {
+    try {
+      const res = await axios.get("/api/analytics");
+      // Assume backend returns { performance, risk, trend, kpi, companies }
+      setPerformance(res.data.performance || []);
+      setRisk(res.data.risk || []);
+      setTrend(res.data.trend || []);
+      setKpi(res.data.kpi || {});
+      setCompanies(res.data.companies || []);
+    } catch (err) {
+      console.error("Failed to fetch analytics", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchAnalytics();
+  }, []);
+
   // Auto-refresh logic
   useEffect(() => {
     if (autoRefresh) {
       autoRefreshRef.current = setInterval(() => {
-        // Fetch new data here
-        // setPerformance(...), setRisk(...), setTrend(...)
+        fetchAnalytics();
         setLastSync(new Date());
       }, 30000);
     } else {
@@ -205,54 +212,59 @@ export default function Analytics({ search = "" }) {
 
   const logActivity = (msg) => setActivityLog(logs => [...logs, { msg, time: new Date() }]);
 
-  const filteredPerformanceSearch = samplePerformance.filter(
-    p =>
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.category.toLowerCase().includes(search.toLowerCase()) ||
-      p.risk.toLowerCase().includes(search.toLowerCase())
-  );
+  // Remove unused samplePerformance search
+
+  // Save analytics data
+  const handleSaveAnalytics = async (data) => {
+    try {
+      await axios.post("/api/analytics", data);
+      fetchAnalytics();
+    } catch (err) {
+      console.error("Failed to save analytics", err);
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-tr from-[#232946]/80 to-[#0f2027]/90 p-0 md:p-8">
+    <div className="min-h-screen bg-gradient-to-br from-[#1A1A2E] via-[#16213E] to-[#0F3460] p-0 md:p-8 text-white">
       <div className="relative z-10 max-w-7xl mx-auto flex flex-col gap-12">
         <header className="mb-8 flex items-center justify-between w-full">
-          <h1 className="text-4xl font-extrabold tracking-wide text-pink-400 drop-shadow">
+          <h1 className="text-4xl font-extrabold tracking-wide text-[#00ADB5] drop-shadow">
             Analytics Dashboard
           </h1>
         </header>
 
         {/* KPI Summary Cards */}
-        <section className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-4">
+  <section className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-4">
           <div className="glass-card flex flex-col items-center">
-            <span className="text-3xl font-bold text-blue-400">{kpi.totalCompanies}</span>
-            <span className="text-sm text-purple-200 mt-2">Total Companies Tracked</span>
+            <span className="text-3xl font-bold text-[#00ADB5]">{kpi.totalCompanies}</span>
+            <span className="text-sm text-[#B8C1EC] mt-2">Total Companies Tracked</span>
           </div>
           <div className="glass-card flex flex-col items-center">
-            <span className="text-3xl font-bold text-green-400">{kpi.avgEsg}</span>
-            <span className="text-sm text-purple-200 mt-2">Avg ESG Score</span>
+            <span className="text-3xl font-bold text-[#00ADB5]">{kpi.avgEsg}</span>
+            <span className="text-sm text-[#B8C1EC] mt-2">Avg ESG Score</span>
           </div>
           <div className="glass-card flex flex-col items-center">
-            <span className="text-3xl font-bold text-red-400">{kpi.highRisk}</span>
-            <span className="text-sm text-purple-200 mt-2">High-Risk Entities</span>
+            <span className="text-3xl font-bold text-[#FF5722]">{kpi.highRisk}</span>
+            <span className="text-sm text-[#B8C1EC] mt-2">High-Risk Entities</span>
           </div>
           <div className="glass-card flex flex-col items-center">
-            <span className="text-3xl font-bold text-purple-400">{kpi.reportsThisMonth}</span>
-            <span className="text-sm text-purple-200 mt-2">Reports Submitted This Month</span>
+            <span className="text-3xl font-bold text-[#00ADB5]">{kpi.reportsThisMonth}</span>
+            <span className="text-sm text-[#B8C1EC] mt-2">Reports Submitted This Month</span>
           </div>
         </section>
 
         {/* Score Comparison */}
         <section className="flex flex-col md:flex-row gap-6 mb-4">
           <div className="glass-card flex-1 flex flex-col items-center border-t-4 border-cyan-500">
-            <span className="text-lg text-cyan-100">YOY ESG Change</span>
-            <span className={`text-2xl font-bold ${kpi.yoyChange >= 0 ? "text-green-400" : "text-red-400"}`}>
+            <span className="text-lg text-[#B8C1EC]">YOY ESG Change</span>
+            <span className={`text-2xl font-bold ${kpi.yoyChange >= 0 ? "text-[#00ADB5]" : "text-[#FF5722]"}`}>
               {kpi.yoyChange >= 0 ? "+" : ""}
               {kpi.yoyChange}% <span className="text-base text-cyan-200">vs last year</span>
             </span>
           </div>
           <div className="glass-card flex-1 flex flex-col items-center border-t-4 border-cyan-500">
-            <span className="text-lg text-cyan-100">MOM ESG Change</span>
-            <span className={`text-2xl font-bold ${kpi.momChange >= 0 ? "text-green-400" : "text-red-400"}`}>
+            <span className="text-lg text-[#B8C1EC]">MOM ESG Change</span>
+            <span className={`text-2xl font-bold ${kpi.momChange >= 0 ? "text-[#00ADB5]" : "text-[#FF5722]"}`}>
               {kpi.momChange >= 0 ? "+" : ""}
               {kpi.momChange}% <span className="text-base text-cyan-200">vs last month</span>
             </span>
@@ -262,22 +274,22 @@ export default function Analytics({ search = "" }) {
         {/* Filters */}
         <section className="flex flex-col md:flex-row gap-4 items-center mb-4">
           <div className="flex gap-3 items-center">
-            <label className="font-semibold text-cyan-100">Company:</label>
+            <label className="font-semibold text-[#B8C1EC]">Company:</label>
             <select
-              className="bg-[#232946]/60 border border-pink-400 text-white px-4 py-2 rounded"
+              className="bg-[#16213E]/60 border border-[#00ADB5] text-white px-4 py-2 rounded"
               value={companyFilter}
               onChange={(e) => setCompanyFilter(e.target.value)}
             >
               <option value="">All</option>
-              {COMPANIES.map((c) => (
-                <option key={c} value={c}>{c}</option>
+              {companies.map((c) => (
+                <option key={c.id || c} value={c.name || c}>{c.name || c}</option>
               ))}
             </select>
           </div>
           <div className="flex gap-3 items-center">
-            <label className="font-semibold text-cyan-100">ESG Category:</label>
+            <label className="font-semibold text-[#B8C1EC]">ESG Category:</label>
             <select
-              className="bg-[#232946]/60 border border-pink-400 text-white px-4 py-2 rounded"
+              className="bg-[#16213E]/60 border border-[#00ADB5] text-white px-4 py-2 rounded"
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
             >
@@ -288,27 +300,27 @@ export default function Analytics({ search = "" }) {
             </select>
           </div>
           <div className="flex gap-3 items-center">
-            <label className="font-semibold text-cyan-100">Date Range:</label>
+            <label className="font-semibold text-[#B8C1EC]">Date Range:</label>
             <input
               type="date"
               name="from"
               value={dateRange.from}
               onChange={handleDateChange}
-              className="rounded px-3 py-2 bg-[#232946]/40 text-white border border-pink-400"
+              className="rounded px-3 py-2 bg-[#16213E]/40 text-white border border-[#00ADB5]"
             />
-            <span className="text-cyan-200">to</span>
+            <span className="text-[#B8C1EC]">to</span>
             <input
               type="date"
               name="to"
               value={dateRange.to}
               onChange={handleDateChange}
-              className="rounded px-3 py-2 bg-[#232946]/40 text-white border border-pink-400"
+              className="rounded px-3 py-2 bg-[#16213E]/40 text-white border border-[#00ADB5]"
             />
           </div>
           <div className="flex gap-3 items-center">
-            <label className="font-semibold text-cyan-100">Region:</label>
+            <label className="font-semibold text-[#B8C1EC]">Region:</label>
             <select
-              className="bg-[#232946]/60 border border-pink-400 text-white px-4 py-2 rounded"
+              className="bg-[#16213E]/60 border border-[#00ADB5] text-white px-4 py-2 rounded"
               value={regionFilter}
               onChange={e => setRegionFilter(e.target.value)}
             >
@@ -317,11 +329,11 @@ export default function Analytics({ search = "" }) {
             </select>
           </div>
           <div className="flex gap-3 items-center">
-            <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow font-semibold">
+            <button className="bg-[#00ADB5] hover:bg-[#FF5722] text-white px-4 py-2 rounded shadow font-semibold">
               Export CSV
             </button>
             <button
-              className="bg-green-700 hover:bg-green-800 px-4 py-2 rounded font-semibold transition text-white"
+              className="bg-[#00ADB5] hover:bg-[#FF5722] px-4 py-2 rounded font-semibold transition text-white"
               onClick={handleExportPDF}         
             >
               Export PDF
@@ -353,19 +365,19 @@ export default function Analytics({ search = "" }) {
           </div>
           <div className="relative z-10">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold mb-4 text-cyan-400 tracking-widest uppercase drop-shadow-lg">
+              <h2 className="text-xl font-bold mb-4 text-[#00ADB5] tracking-widest uppercase drop-shadow-lg">
                 Performance Benchmarking
               </h2>
               <div className="flex gap-2">
                 <button
                   onClick={handleDownloadChart}
-                  className="bg-gradient-to-r from-cyan-500 to-purple-600 px-3 py-1 rounded font-semibold transition text-white shadow-lg hover:scale-105"
+                  className="bg-gradient-to-r from-[#00ADB5] to-[#FF5722] px-3 py-1 rounded font-semibold transition text-white shadow-lg hover:scale-105"
                 >
                   <span className="material-icons align-middle mr-1">download</span> Chart
                 </button>
                 <button
                   onClick={handleSaveSnapshot}
-                  className="bg-gradient-to-r from-purple-700 to-cyan-600 px-3 py-1 rounded font-semibold transition text-white shadow-lg hover:scale-105"
+                  className="bg-gradient-to-r from-[#FF5722] to-[#00ADB5] px-3 py-1 rounded font-semibold transition text-white shadow-lg hover:scale-105"
                 >
                   <span className="material-icons align-middle mr-1">save</span> Snapshot
                 </button>
@@ -452,7 +464,7 @@ export default function Analytics({ search = "" }) {
             </svg>
           </div>
           <div className="relative z-10">
-            <h2 className="text-2xl font-bold mb-6 text-pink-400">Risk Analysis</h2>
+              <h2 className="text-2xl font-bold mb-6 text-[#FF5722]">Risk Analysis</h2>
             <div className="flex flex-col md:flex-row items-center gap-8">
               <ResponsiveContainer width="100%" height={220} className="md:w-1/2">
                 <PieChart>
@@ -493,7 +505,7 @@ export default function Analytics({ search = "" }) {
                           : "bg-cyan-400"
                       }`}
                     ></span>
-                    <span className="text-lg font-semibold">{r.name}</span>
+                    <span className="text-lg font-semibold text-white">{r.name}</span>
                     <span className="ml-auto text-lg">{r.value}%</span>
                   </div>
                 ))}
@@ -526,10 +538,10 @@ export default function Analytics({ search = "" }) {
           </div>
           <div className="relative z-10">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-4">
-              <h2 className="text-2xl font-bold text-purple-400">Trend Analysis</h2>
+              <h2 className="text-2xl font-bold text-[#00ADB5]">Trend Analysis</h2>
               <div className="flex gap-3">
                 <button
-                  className="bg-purple-600 text-white px-4 py-2 rounded-xl font-semibold"
+                  className="bg-[#00ADB5] text-white px-4 py-2 rounded-xl font-semibold"
                   onClick={() => setTrend(sampleTrend)}
                 >
                   Custom Range
@@ -537,8 +549,8 @@ export default function Analytics({ search = "" }) {
                 <button
                   className={`px-4 py-2 rounded-xl font-semibold transition ${
                     autoRefresh
-                      ? "bg-green-600 text-white"
-                      : "bg-gray-200 text-gray-900 hover:bg-gray-300"
+                      ? "bg-[#00ADB5] text-white"
+                      : "bg-[#16213E] text-[#B8C1EC] hover:bg-[#0F3460]"
                   }`}
                   onClick={() => setAutoRefresh((v) => !v)}
                 >
@@ -546,7 +558,7 @@ export default function Analytics({ search = "" }) {
                 </button>
                 <button
                   onClick={handleEmailReport}
-                  className="bg-blue-700 hover:bg-blue-800 px-4 py-2 rounded font-semibold transition"
+                  className="bg-[#FF5722] hover:bg-[#00ADB5] px-4 py-2 rounded font-semibold transition text-white"
                 >
                   Email Report
                 </button>
@@ -566,14 +578,14 @@ export default function Analytics({ search = "" }) {
         {/* Snapshots */}
         {snapshotList.length > 0 && (
           <section className="glass-card rounded-2xl shadow p-6 mt-6">
-            <h2 className="text-xl font-bold mb-4 text-cyan-400">Saved Snapshots</h2>
+            <h2 className="text-xl font-bold mb-4 text-[#00ADB5]">Saved Snapshots</h2>
             <ul className="space-y-2">
               {snapshotList.map((snap, idx) => (
                 <li key={idx} className="flex flex-col md:flex-row md:items-center md:gap-6">
-                  <span className="text-cyan-100">{snap.date}</span>
-                  <span className="text-sm text-green-100">Avg ESG: {snap.kpi.avgEsg}</span>
-                  <span className="text-sm text-red-200">High Risk: {snap.kpi.highRisk}</span>
-                  <span className="text-sm text-purple-100">Reports: {snap.kpi.reportsThisMonth}</span>
+                  <span className="text-[#B8C1EC]">{snap.date}</span>
+                  <span className="text-sm text-[#00ADB5]">Avg ESG: {snap.kpi.avgEsg}</span>
+                  <span className="text-sm text-[#FF5722]">High Risk: {snap.kpi.highRisk}</span>
+                  <span className="text-sm text-[#B8C1EC]">Reports: {snap.kpi.reportsThisMonth}</span>
                 </li>
               ))}
             </ul>
@@ -596,8 +608,8 @@ export default function Analytics({ search = "" }) {
 
         {/* User Activity Log */}
         <section className="glass-card rounded-xl shadow p-4 mt-6">
-          <h2 className="text-lg font-bold mb-2 text-pink-400">User Activity Log</h2>
-          <ul className="text-xs text-purple-200 space-y-1">
+          <h2 className="text-lg font-bold mb-2 text-[#00ADB5]">User Activity Log</h2>
+          <ul className="text-xs text-[#B8C1EC] space-y-1">
             {activityLog.map((log, i) => (
               <li key={i}>{log.time.toLocaleTimeString()} — {log.msg}</li>
             ))}
@@ -605,7 +617,7 @@ export default function Analytics({ search = "" }) {
         </section>
       </div>
       <footer className="w-full mt-12 py-6 flex justify-center items-center">
-        <p className="text-purple-200 text-center text-lg font-semibold glow-text">
+  <p className="text-[#B8C1EC] text-center text-lg font-semibold glow-text">
           Visualize performance, risk, and trends in real time
         </p>
       </footer>

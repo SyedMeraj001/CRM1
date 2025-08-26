@@ -1,27 +1,28 @@
 import React, { useState, useEffect } from 'react';
+import SearchBar from '../components/SearchBar';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 
-const remindersData = [
-  { task: "Call Client", due: "Tomorrow" },
-  { task: "Send ESG Update", due: "2 days" },
-  // ...
-];
 
-const Reminders = ({ search = "" }) => {
+const Reminders = () => {
   const [reminders, setReminders] = useState([]);
   const [newReminder, setNewReminder] = useState({
-    title: '',
-    dueDate: '',
-    status: 'Pending',
+    task: '',
+    due: '',
     type: 'Report Submission',
+    done: false,
   });
+  const [search, setSearch] = useState("");
   const navigate = useNavigate();
 
   const fetchReminders = async () => {
     try {
-      const response = await axios.get('/api/reminders');
-      setReminders(response.data);
+      try {
+        const response = await axios.get('/api/reminders');
+        setReminders(response.data);
+      } catch (err) {
+        console.error('Error fetching reminders', err);
+      }
     } catch (err) {
       console.error('Error fetching reminders', err);
     }
@@ -32,122 +33,163 @@ const Reminders = ({ search = "" }) => {
   }, []);
 
   const handleAddReminder = async () => {
+    if (!newReminder.task || !newReminder.due) return;
     try {
-      const response = await axios.post('/api/reminders', newReminder);
+      const reminderToSend = { ...newReminder, done: false };
+      const response = await axios.post('/api/reminders', reminderToSend);
       setReminders([...reminders, response.data]);
-      setNewReminder({ title: '', dueDate: '', status: 'Pending', type: 'Report Submission' });
+      setNewReminder({ task: '', due: '', type: 'Report Submission', done: false });
     } catch (err) {
       console.error('Error adding reminder', err);
     }
   };
 
-  const updateStatus = async (id, status) => {
-    try {
-      await axios.put(`/api/reminders/${id}`, { status });
-      fetchReminders();
-    } catch (err) {
-      console.error('Error updating status', err);
-    }
-  };
+    const updateStatus = async (id) => {
+      try {
+        await axios.patch(`/api/reminders/${id}`, { done: true });
+        // Always fetch fresh reminders after update
+        const response = await axios.get('/api/reminders');
+        setReminders(response.data);
+      } catch (err) {
+        console.error('Error updating status', err);
+      }
+    };
 
-  const deleteReminder = async (id) => {
-    try {
-      await axios.delete(`/api/reminders/${id}`);
-      setReminders(reminders.filter(r => r.id !== id));
-    } catch (err) {
-      console.error('Error deleting reminder', err);
-    }
-  };
+    const deleteReminder = async (id) => {
+      try {
+        await axios.delete(`/api/reminders/${id}`);
+        // Always fetch fresh reminders after delete
+        const response = await axios.get('/api/reminders');
+        setReminders(response.data);
+      } catch (err) {
+        console.error('Error deleting reminder', err);
+      }
+    };
 
-  const filteredReminders = remindersData.filter(
-    r => r.task.toLowerCase().includes(search.toLowerCase()) ||
-         r.due.toLowerCase().includes(search.toLowerCase())
+  const filteredReminders = reminders.filter(
+    r =>
+      r &&
+      ((r.task && typeof r.task === 'string' && r.task.toLowerCase().includes(search.toLowerCase())) ||
+       (r.due && typeof r.due === 'string' && r.due.toLowerCase().includes(search.toLowerCase())) ||
+       (r.type && typeof r.type === 'string' && r.type.toLowerCase().includes(search.toLowerCase())))
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-tr from-[#232946]/80 to-[#0f2027]/90 p-8 text-white">
+    <div className="min-h-screen bg-gradient-to-br from-[#1A1A2E] via-[#16213E] to-[#0F3460] p-8 text-white font-sans">
       <div className="max-w-2xl mx-auto">
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-bold text-pink-400 flex items-center">
+          <h2 className="text-3xl font-extrabold text-[#00ADB5] drop-shadow-lg flex items-center">
             Reminders & Notifications
           </h2>
         </div>
-        <div className="mb-6 glass-card">
-          <h3 className="text-lg font-medium mb-2 text-white">Add New Reminder</h3>
-          <div className="grid md:grid-cols-4 gap-4">
-            <input
-              type="text"
-              placeholder="Reminder Title"
-              value={newReminder.title}
-              onChange={(e) => setNewReminder({ ...newReminder, title: e.target.value })}
-              className="p-2 rounded w-full bg-white/10 text-white placeholder-purple-300 border border-purple-700 focus:outline-none"
-            />
-            <input
-              type="date"
-              value={newReminder.dueDate}
-              onChange={(e) => setNewReminder({ ...newReminder, dueDate: e.target.value })}
-              className="p-2 rounded w-full bg-white/10 text-white border border-purple-700 focus:outline-none"
-            />
-            <select
-              value={newReminder.type}
-              onChange={(e) => setNewReminder({ ...newReminder, type: e.target.value })}
-              className="p-2 rounded w-full bg-white/10 text-white border border-purple-700 focus:outline-none"
-            >
-              <option>Report Submission</option>
-              <option>Compliance Deadline</option>
-              <option>Follow-up</option>
-              <option>Other</option>
-            </select>
-            <button
-              onClick={handleAddReminder}
-              className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-            >
-              Add Reminder
-            </button>
+        <SearchBar value={search} onChange={setSearch} placeholder="Search reminders..." />
+        <div className="mb-6 glass-card border border-[#FF5722] shadow-xl rounded-2xl">
+          <h3 className="text-xl font-bold mb-4 text-[#FF5722]">Add New Reminder</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left rounded-xl glass-table mb-2">
+              <thead>
+                <tr className="bg-gradient-to-r from-[#23234e] via-[#1a1a2e] to-[#16213e] text-[#00ADB5] font-bold text-base">
+                  <th className="py-2 px-3">Title</th>
+                  <th className="py-2 px-3">Due Date</th>
+                  <th className="py-2 px-3">Type</th>
+                  <th className="py-2 px-3">Status</th>
+                  <th className="py-2 px-3">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td className="py-2 px-3">
+                    <input
+                      type="text"
+                      placeholder="Reminder Task"
+                      value={newReminder.task}
+                      onChange={(e) => setNewReminder({ ...newReminder, task: e.target.value })}
+                      className="p-2 rounded w-full bg-white/10 text-white placeholder-purple-300 border border-purple-700 focus:outline-none"
+                    />
+                  </td>
+                  <td className="py-2 px-3">
+                    <input
+                      type="date"
+                      value={newReminder.due}
+                      onChange={(e) => setNewReminder({ ...newReminder, due: e.target.value })}
+                      className="p-2 rounded w-full bg-white/10 text-white border border-purple-700 focus:outline-none"
+                    />
+                  </td>
+                  <td className="py-2 px-3">
+                    <select
+                      value={newReminder.type}
+                      onChange={(e) => setNewReminder({ ...newReminder, type: e.target.value })}
+                      className="p-2 rounded w-full bg-white/10 text-white border border-purple-700 focus:outline-none"
+                    >
+                      <option>Report Submission</option>
+                      <option>Compliance Deadline</option>
+                      <option>Follow-up</option>
+                      <option>Other</option>
+                    </select>
+                  </td>
+                  <td className="py-2 px-3">
+                    <input
+                      type="text"
+                      value="Pending"
+                      disabled
+                      className="p-2 rounded w-full bg-yellow-500/80 text-white border border-yellow-400 font-bold text-center cursor-not-allowed"
+                    />
+                  </td>
+                  <td className="py-2 px-3">
+                    <button
+                      onClick={handleAddReminder}
+                      className="bg-green-600 text-white px-4 py-2 rounded-lg shadow-md hover:bg-green-700 transition-all duration-150"
+                    >
+                      Add Reminder
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
-        
 
-        <div className="overflow-x-auto glass-card">
-          <table className="w-full text-left">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left rounded-2xl overflow-hidden shadow-xl glass-table">
             <thead>
-              <tr className="text-gray-700 font-semibold">
-                <th className="py-2">Title</th>
-                <th className="py-2">Due Date</th>
-                <th className="py-2">Type</th>
-                <th className="py-2">Status</th>
-                <th className="py-2">Actions</th>
+              <tr className="bg-gradient-to-r from-[#23234e] via-[#1a1a2e] to-[#16213e] text-[#00ADB5] font-bold text-base">
+                <th className="py-3 px-4">Title</th>
+                <th className="py-3 px-4">Due Date</th>
+                <th className="py-3 px-4">Type</th>
+                <th className="py-3 px-4">Status</th>
+                <th className="py-3 px-4">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredReminders.map((reminder) => (
-                <tr key={reminder.id} className="border-t text-sm">
-                  <td className="py-2">{reminder.title}</td>
-                  <td className="py-2">{reminder.dueDate}</td>
-                  <td className="py-2">{reminder.type}</td>
-                  <td className="py-2">
+                <tr
+                  key={reminder.id}
+                  className="border-t border-[#23234e] text-sm glass-row hover:bg-[#23234e]/60 transition-all duration-150"
+                >
+                  <td className="py-3 px-4 font-semibold text-white/90">{reminder.task}</td>
+                  <td className="py-3 px-4 text-purple-300">{reminder.due ? new Date(reminder.due).toLocaleDateString() : ''}</td>
+                  <td className="py-3 px-4 text-[#FF5722] font-medium">{reminder.type && reminder.type.trim() ? reminder.type : 'N/A'}</td>
+                  <td className="py-3 px-4">
                     <span
-                      className={`px-3 py-1 rounded text-white ${
-                        reminder.status === 'Pending'
-                          ? 'bg-yellow-500'
-                          : reminder.status === 'Completed'
-                          ? 'bg-green-600'
-                          : 'bg-red-500'
+                      className={`px-3 py-1 rounded-lg text-white font-bold shadow-md ${
+                        reminder.done === true
+                          ? 'bg-green-600/80 border border-green-400'
+                          : 'bg-yellow-500/80 border border-yellow-400'
                       }`}
                     >
-                      {reminder.status}
+                      {reminder.done === true ? 'Completed' : 'Pending'}
                     </span>
                   </td>
-                  <td className="py-2 space-x-2">
+                  <td className="py-3 px-4 space-x-2">
                     <button
-                      onClick={() => updateStatus(reminder.id, 'Completed')}
-                      className="text-sm bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
+                      onClick={() => updateStatus(reminder.id)}
+                      className="text-sm bg-blue-600/80 text-white px-3 py-1 rounded-lg shadow hover:bg-blue-700/90 transition-all duration-150"
                     >
                       Mark Done
                     </button>
                     <button
                       onClick={() => deleteReminder(reminder.id)}
-                      className="text-sm bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700"
+                      className="text-sm bg-red-600/80 text-white px-3 py-1 rounded-lg shadow hover:bg-red-700/90 transition-all duration-150"
                     >
                       Delete
                     </button>
@@ -182,6 +224,22 @@ const Reminders = ({ search = "" }) => {
   .glass-card:hover {
     box-shadow: 0 12px 40px 0 rgba(255, 0, 128, 0.25), 0 8px 32px 0 rgba(31, 38, 135, 0.37);
     transform: translateY(-4px) scale(1.02);
+  }
+  .glass-table {
+    background: rgba(36, 36, 62, 0.6);
+    border-radius: 1.25rem;
+    box-shadow: 0 4px 24px 0 rgba(31, 38, 135, 0.25);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    border: 1px solid rgba(255,255,255,0.10);
+    overflow: hidden;
+  }
+  .glass-row {
+    transition: background 0.2s, box-shadow 0.2s;
+  }
+  .glass-row:hover {
+    background: rgba(36, 36, 62, 0.8);
+    box-shadow: 0 2px 8px 0 rgba(255, 0, 128, 0.10);
   }
 `}</style>
     </div>

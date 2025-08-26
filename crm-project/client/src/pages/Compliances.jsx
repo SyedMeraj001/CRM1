@@ -1,47 +1,8 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import axios from "axios";
 
-// Dummy user role: "officer" (full access) or "auditor" (view only)
 const USER_ROLE = "officer"; // Change to "auditor" to test view-only
-
-// Dummy data for demonstration
-const DUMMY_DOCS = [
-  {
-    id: 1,
-    name: "ESG_Report_July2025.pdf",
-    type: "SEBI",
-    department: "Sustainability",
-    owner: "Ali",
-    status: "Under Review",
-    reviewer: "Jane Doe",
-    submitted: "2025-07-20",
-    remarks: "Awaiting additional data",
-    attachments: ["ESG_Report_July2025.pdf"],
-    history: [
-      { action: "Uploaded", user: "Ali", time: "2025-07-20 10:12" },
-      { action: "Reviewed", user: "Jane Doe", time: "2025-07-21 09:00" },
-    ],
-    deadline: "2025-07-25",
-  },
-  {
-    id: 2,
-    name: "GHG_Compliance.xlsx",
-    type: "BRSR",
-    department: "Finance",
-    owner: "Ali",
-    status: "Approved",
-    reviewer: "John Smith",
-    submitted: "2025-07-10",
-    remarks: "All clear",
-    attachments: ["GHG_Compliance.xlsx", "GHG_Supporting.zip"],
-    history: [
-      { action: "Uploaded", user: "Ali", time: "2025-07-10 14:22" },
-      { action: "Reviewed", user: "John Smith", time: "2025-07-11 11:00" },
-      { action: "Approved", user: "John Smith", time: "2025-07-11 11:05" },
-    ],
-    deadline: "2025-07-20",
-  },
-];
 
 const STATUS_COLORS = {
   "Pending": "bg-yellow-100 text-yellow-800",
@@ -60,31 +21,44 @@ const FILE_TYPES = [
 const REG_TYPES = ["SEBI", "BRSR", "ISO", "GRI"];
 const DEPARTMENTS = ["HR", "Legal", "Sustainability", "Finance"];
 
+
 export default function Compliances() {
   const navigate = useNavigate();
-  const [docs, setDocs] = useState(DUMMY_DOCS);
+  const [docs, setDocs] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [uploadError, setUploadError] = useState("");
   const [filters, setFilters] = useState({ type: "", status: "", date: "", department: "", owner: "" });
   const [search, setSearch] = useState("");
-  const [calendarMonth, setCalendarMonth] = useState("2025-07");
+  const [calendarMonth, setCalendarMonth] = useState(new Date().toISOString().slice(0, 7));
   const [selectedDate, setSelectedDate] = useState("");
   const fileInput = useRef();
 
+  // Fetch compliance docs from backend
+  const fetchDocs = async () => {
+    try {
+      const res = await axios.get("/api/compliances");
+      setDocs(res.data);
+    } catch (err) {
+      console.error("Failed to fetch compliance docs", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchDocs();
+  }, []);
+
   // Compliance Score Calculation
-  const complianceScore = Math.round(
+  const complianceScore = docs.length > 0 ? Math.round(
     (docs.filter(d => d.status === "Approved").length / docs.length) * 100
-  );
+  ) : 0;
   const scoreColor =
     complianceScore > 80
       ? "bg-green-100 text-green-800"
       : complianceScore >= 50
       ? "bg-yellow-100 text-yellow-800"
       : "bg-red-100 text-red-800";
-
-  // File upload handler (simulate progress)
-  const handleFileUpload = (e) => {
+  const handleFileUpload = async (e) => {
     if (USER_ROLE !== "officer") return;
     const files = Array.from(e.target.files);
     setUploadError("");
@@ -103,43 +77,28 @@ export default function Compliances() {
     }
     setUploading(true);
     setProgress(0);
-    // Simulate upload
-    const interval = setInterval(() => {
-      setProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setUploading(false);
-          setDocs(prevDocs => [
-            {
-              id: prevDocs.length + 1,
-              name: files[0].name,
-              type: "Unknown",
-              department: "Unknown",
-              owner: "You",
-              status: "Pending",
-              reviewer: "",
-              submitted: new Date().toISOString().slice(0, 10),
-              remarks: "",
-              attachments: files.map(f => f.name),
-              history: [
-                { action: "Uploaded", user: "You", time: new Date().toLocaleString() },
-              ],
-              deadline: "",
-            },
-            ...prevDocs,
-          ]);
-          return 100;
+    const formData = new FormData();
+    files.forEach(file => formData.append("files", file));
+    try {
+      await axios.post("/api/compliances/upload", formData, {
+        onUploadProgress: (progressEvent) => {
+          setProgress(Math.round((progressEvent.loaded * 100) / progressEvent.total));
         }
-        return prev + 20;
       });
-    }, 300);
+      setUploading(false);
+      setProgress(100);
+      fetchDocs();
+    } catch (err) {
+      setUploading(false);
+      setUploadError("Upload failed.");
+    }
   };
 
   // Filtered docs
   const filteredDocs = docs.filter(doc =>
     (!filters.type || doc.type === filters.type) &&
     (!filters.status || doc.status === filters.status) &&
-    (!filters.date || doc.submitted.startsWith(filters.date)) &&
+    (!filters.date || (doc.submitted && doc.submitted.startsWith(filters.date))) &&
     (!filters.department || doc.department === filters.department) &&
     (!filters.owner || doc.owner === filters.owner) &&
     (!search || doc.name.toLowerCase().includes(search.toLowerCase()))
@@ -156,38 +115,38 @@ export default function Compliances() {
   const today = new Date().toISOString().slice(0, 10);
 
   return (
-    <div className="min-h-screen bg-gradient-to-tr from-[#232946]/80 to-[#0f2027]/90 p-0 md:p-8">
+    <div className="min-h-screen bg-gradient-to-br from-[#1A1A2E] via-[#16213E] to-[#0F3460] p-0 md:p-8 text-white">
       <div className="max-w-6xl mx-auto">
         <header className="mb-8 w-full flex items-center justify-between">
-          <h1 className="text-3xl font-extrabold text-pink-400 mb-2">
+          <h1 className="text-3xl font-extrabold text-[#00ADB5] mb-2">
             Compliance Management
           </h1>
           {/* Removed Back to Dashboard button */}
         </header>
 
         {/* Dashboard Widgets */}
-        <section className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+  <section className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="glass-card flex flex-col items-center">
-            <span className="text-3xl font-bold text-pink-400">{totalSubmissions}</span>
-            <span className="text-sm text-purple-200 mt-2">Total Submissions</span>
+            <span className="text-3xl font-bold text-[#00ADB5]">{totalSubmissions}</span>
+            <span className="text-sm text-[#B8C1EC] mt-2">Total Submissions</span>
           </div>
           <div className="glass-card flex flex-col items-center">
-            <span className="text-3xl font-bold text-yellow-400">{pendingReviews}</span>
-            <span className="text-sm text-purple-200 mt-2">Pending Reviews</span>
+            <span className="text-3xl font-bold text-[#FF5722]">{pendingReviews}</span>
+            <span className="text-sm text-[#B8C1EC] mt-2">Pending Reviews</span>
           </div>
           <div className={`glass-card flex flex-col items-center ${scoreColor}`}>
-            <span className="text-3xl font-bold">{complianceScore}%</span>
-            <span className="text-sm mt-2 text-purple-200">Compliance Score</span>
+            <span className="text-3xl font-bold text-[#00ADB5]">{complianceScore}%</span>
+            <span className="text-sm mt-2 text-[#B8C1EC]">Compliance Score</span>
           </div>
           <div className="glass-card flex flex-col items-center">
-            <span className="text-3xl font-bold text-red-400">{upcomingDeadlines}</span>
-            <span className="text-sm text-purple-200 mt-2">Upcoming Deadlines</span>
+            <span className="text-3xl font-bold text-[#FF5722]">{upcomingDeadlines}</span>
+            <span className="text-sm text-[#B8C1EC] mt-2">Upcoming Deadlines</span>
           </div>
         </section>
 
         {/* Compliance Calendar */}
         <section className="glass-card mb-8">
-          <h2 className="text-lg font-bold mb-4 text-pink-400">Compliance Calendar</h2>
+          <h2 className="text-lg font-bold mb-4 text-[#00ADB5]">Compliance Calendar</h2>
           <input
             type="month"
             value={calendarMonth}
@@ -195,7 +154,7 @@ export default function Compliances() {
               setCalendarMonth(e.target.value);
               setSelectedDate("");
             }}
-            className="mb-4 border rounded px-2 py-1 bg-[#232946]/60 text-white"
+            className="mb-4 border rounded px-2 py-1 bg-[#16213E]/60 text-white border-[#00ADB5]"
           />
           <div className="grid grid-cols-7 gap-2 text-center text-xs">
             {[...Array(daysInMonth)].map((_, i) => {
@@ -210,9 +169,9 @@ export default function Compliances() {
                   type="button"
                   onClick={() => setSelectedDate(dateStr)}
                   className={`h-16 w-full flex flex-col justify-start items-center rounded border focus:outline-none
-                    ${isToday ? "border-pink-400" : ""}
-                    ${docsForDay.length === 0 ? "bg-[#232946]/40 border-purple-700 text-purple-200" : isOverdue ? "bg-pink-400/20 border-pink-400 text-pink-400" : "bg-green-400/20 border-green-400 text-green-400"}
-                    ${selectedDate === dateStr ? "ring-2 ring-pink-400" : ""}
+                    ${isToday ? "border-[#00ADB5]" : ""}
+                    ${docsForDay.length === 0 ? "bg-[#16213E]/40 border-[#B8C1EC] text-[#B8C1EC]" : isOverdue ? "bg-[#FF5722]/20 border-[#FF5722] text-[#FF5722]" : "bg-[#00ADB5]/20 border-[#00ADB5] text-[#00ADB5]"}
+                    ${selectedDate === dateStr ? "ring-2 ring-[#00ADB5]" : ""}
                   `}
                 >
                   <span className="font-bold">{i + 1}</span>
@@ -229,23 +188,23 @@ export default function Compliances() {
           </div>
           {selectedDate && (
             <div className="mt-4">
-              <h3 className="text-md font-semibold mb-2 text-pink-400">
+              <h3 className="text-md font-semibold mb-2 text-[#00ADB5]">
                 Deadlines for {selectedDate}:
               </h3>
               {calendarDocs.filter(d => d.deadline === selectedDate).length === 0 ? (
-                <div className="text-purple-300 text-sm">No deadlines.</div>
+                <div className="text-[#B8C1EC] text-sm">No deadlines.</div>
               ) : (
                 <ul className="space-y-1">
                   {calendarDocs
                     .filter(d => d.deadline === selectedDate)
                     .map(d => (
                       <li key={d.id} className="flex items-center gap-2">
-                        <span className="font-semibold text-pink-400">{d.name}</span>
-                        <span className="text-xs bg-[#232946]/60 rounded px-2 py-0.5 text-purple-200">{d.type}</span>
-                        <span className="text-xs text-purple-200">Owner: {d.owner}</span>
-                        <span className={`text-xs px-2 py-0.5 rounded ${STATUS_COLORS[d.status] || "bg-[#232946]/40 text-purple-200"}`}>{d.status}</span>
+                        <span className="font-semibold text-[#00ADB5]">{d.name}</span>
+                        <span className="text-xs bg-[#16213E]/60 rounded px-2 py-0.5 text-[#B8C1EC]">{d.type}</span>
+                        <span className="text-xs text-[#B8C1EC]">Owner: {d.owner}</span>
+                        <span className={`text-xs px-2 py-0.5 rounded ${STATUS_COLORS[d.status] || "bg-[#16213E]/40 text-[#B8C1EC]"}`}>{d.status}</span>
                         {new Date(d.deadline) < new Date(today) && (
-                          <span className="text-xs text-pink-400 font-bold">Overdue</span>
+                          <span className="text-xs text-[#FF5722] font-bold">Overdue</span>
                         )}
                       </li>
                     ))}
@@ -257,27 +216,27 @@ export default function Compliances() {
 
         {/* Upload Section */}
         <section className="glass-card mb-8">
-          <h2 className="text-lg font-bold mb-4 text-pink-400">Upload Document</h2>
+          <h2 className="text-lg font-bold mb-4 text-[#00ADB5]">Upload Document</h2>
           <input
             ref={fileInput}
             type="file"
             accept={FILE_TYPES.map(f => f.accept).join(",")}
-            className="mb-2 bg-[#232946]/60 text-white"
+            className="mb-2 bg-[#16213E]/60 text-white border-[#00ADB5]"
             onChange={handleFileUpload}
             disabled={uploading || USER_ROLE !== "officer"}
             multiple
           />
-          {uploadError && <div className="text-pink-400 mb-2">{uploadError}</div>}
+          {uploadError && <div className="text-[#FF5722] mb-2">{uploadError}</div>}
           {uploading && (
-            <div className="w-full bg-purple-200 rounded h-3 mb-2">
+            <div className="w-full bg-[#B8C1EC] rounded h-3 mb-2">
               <div
-                className="bg-pink-400 h-3 rounded"
+                className="bg-[#00ADB5] h-3 rounded"
                 style={{ width: `${progress}%`, transition: "width 0.3s" }}
               />
             </div>
           )}
-          <div className="text-xs text-purple-200">
-            Allowed: PDF, Excel, Word, ZIP. Max size: 10MB. {USER_ROLE !== "officer" && <span className="text-pink-400">View only</span>}
+          <div className="text-xs text-[#B8C1EC]">
+            Allowed: PDF, Excel, Word, ZIP. Max size: 10MB. {USER_ROLE !== "officer" && <span className="text-[#FF5722]">View only</span>}
           </div>
         </section>
 
@@ -286,12 +245,12 @@ export default function Compliances() {
           <input
             type="text"
             placeholder="Smart search by file name..."
-            className="rounded px-3 py-2 border border-pink-400 bg-[#232946]/60 text-white"
+            className="rounded px-3 py-2 border border-[#00ADB5] bg-[#16213E]/60 text-white"
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
           <select
-            className="rounded px-3 py-2 border border-pink-400 bg-[#232946]/60 text-white"
+            className="rounded px-3 py-2 border border-[#00ADB5] bg-[#16213E]/60 text-white"
             value={filters.type}
             onChange={e => setFilters(f => ({ ...f, type: e.target.value }))}
           >
@@ -299,7 +258,7 @@ export default function Compliances() {
             {REG_TYPES.map(r => <option key={r} value={r}>{r}</option>)}
           </select>
           <select
-            className="rounded px-3 py-2 border border-pink-400 bg-[#232946]/60 text-white"
+            className="rounded px-3 py-2 border border-[#00ADB5] bg-[#16213E]/60 text-white"
             value={filters.status}
             onChange={e => setFilters(f => ({ ...f, status: e.target.value }))}
           >
@@ -310,7 +269,7 @@ export default function Compliances() {
             <option value="Rejected">Rejected</option>
           </select>
           <select
-            className="rounded px-3 py-2 border border-pink-400 bg-[#232946]/60 text-white"
+            className="rounded px-3 py-2 border border-[#00ADB5] bg-[#16213E]/60 text-white"
             value={filters.department}
             onChange={e => setFilters(f => ({ ...f, department: e.target.value }))}
           >
@@ -319,7 +278,7 @@ export default function Compliances() {
           </select>
           <input
             type="date"
-            className="rounded px-3 py-2 border border-pink-400 bg-[#232946]/60 text-white"
+            className="rounded px-3 py-2 border border-[#00ADB5] bg-[#16213E]/60 text-white"
             value={filters.date}
             onChange={e => setFilters(f => ({ ...f, date: e.target.value }))}
           />
@@ -327,11 +286,11 @@ export default function Compliances() {
 
         {/* Document List */}
         <section className="glass-card">
-          <h2 className="text-lg font-bold mb-4 text-pink-400">Submitted Documents</h2>
+          <h2 className="text-lg font-bold mb-4 text-[#00ADB5]">Submitted Documents</h2>
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead>
-                <tr className="bg-[#232946]/40 text-pink-400">
+                <tr className="bg-[#16213E]/40 text-[#00ADB5]">
                   <th className="p-2 text-left">File Name</th>
                   <th className="p-2 text-left">Type</th>
                   <th className="p-2 text-left">Department</th>
@@ -348,31 +307,31 @@ export default function Compliances() {
               <tbody>
                 {filteredDocs.map(doc => (
                   <tr key={doc.id} className="border-b last:border-b-0">
-                    <td className="p-2 text-purple-100">{doc.name}</td>
-                    <td className="p-2 text-purple-100">{doc.type}</td>
-                    <td className="p-2 text-purple-100">{doc.department}</td>
-                    <td className="p-2 text-purple-100">{doc.owner}</td>
+                    <td className="p-2 text-[#B8C1EC]">{doc.name}</td>
+                    <td className="p-2 text-[#B8C1EC]">{doc.type}</td>
+                    <td className="p-2 text-[#B8C1EC]">{doc.department}</td>
+                    <td className="p-2 text-[#B8C1EC]">{doc.owner}</td>
                     <td className="p-2">
-                      <span className={`px-2 py-1 rounded text-xs font-semibold ${STATUS_COLORS[doc.status] || "bg-[#232946]/40 text-purple-200"}`}>
+                      <span className={`px-2 py-1 rounded text-xs font-semibold ${STATUS_COLORS[doc.status] || "bg-[#16213E]/40 text-[#B8C1EC]"}`}>
                         {doc.status}
                       </span>
                     </td>
-                    <td className="p-2 text-purple-100">{doc.reviewer || <span className="text-purple-300">—</span>}</td>
-                    <td className="p-2 text-purple-100">{doc.submitted}</td>
-                    <td className="p-2 text-purple-100">{doc.deadline || <span className="text-purple-300">—</span>}</td>
-                    <td className="p-2 text-purple-100">{doc.remarks || <span className="text-purple-300">—</span>}</td>
+                    <td className="p-2 text-[#B8C1EC]">{doc.reviewer || <span className="text-[#B8C1EC]">—</span>}</td>
+                    <td className="p-2 text-[#B8C1EC]">{doc.submitted}</td>
+                    <td className="p-2 text-[#B8C1EC]">{doc.deadline || <span className="text-[#B8C1EC]">—</span>}</td>
+                    <td className="p-2 text-[#B8C1EC]">{doc.remarks || <span className="text-[#B8C1EC]">—</span>}</td>
                     <td className="p-2">
                       {doc.attachments.map((a, i) => (
-                        <span key={i} className="inline-block bg-[#232946]/40 rounded px-2 py-1 text-xs text-purple-200 mr-1">{a}</span>
+                        <span key={i} className="inline-block bg-[#16213E]/40 rounded px-2 py-1 text-xs text-[#B8C1EC] mr-1">{a}</span>
                       ))}
                     </td>
                     <td className="p-2 flex gap-2">
-                      <button className="text-pink-400 hover:underline">View</button>
-                      <button className="text-green-400 hover:underline">Download</button>
+                      <button className="text-[#00ADB5] hover:underline">View</button>
+                      <button className="text-[#FF5722] hover:underline">Download</button>
                       {USER_ROLE === "officer" && (
                         <>
-                          <button className="text-yellow-400 hover:underline">Edit</button>
-                          <button className="text-red-400 hover:underline">Delete</button>
+                          <button className="text-[#B8C1EC] hover:underline">Edit</button>
+                          <button className="text-[#FF5722] hover:underline">Delete</button>
                         </>
                       )}
                     </td>
@@ -380,7 +339,7 @@ export default function Compliances() {
                 ))}
                 {filteredDocs.length === 0 && (
                   <tr>
-                    <td colSpan={11} className="text-center text-purple-300 py-6">
+                    <td colSpan={11} className="text-center text-[#B8C1EC] py-6">
                       No documents found.
                     </td>
                   </tr>
@@ -390,13 +349,13 @@ export default function Compliances() {
           </div>
           {/* Export Buttons */}
           <div className="flex gap-3 mt-4 justify-center">
-            <button className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded shadow font-semibold">
+            <button className="bg-[#00ADB5] hover:bg-[#FF5722] text-white px-4 py-2 rounded shadow font-semibold">
               Export CSV
             </button>
-            <button className="bg-pink-500 hover:bg-pink-600 text-white px-4 py-2 rounded shadow font-semibold">
+            <button className="bg-[#FF5722] hover:bg-[#00ADB5] text-white px-4 py-2 rounded shadow font-semibold">
               Export XLSX
             </button>
-            <button className="bg-purple-900 hover:bg-purple-800 text-white px-4 py-2 rounded shadow font-semibold">
+            <button className="bg-[#B8C1EC] hover:bg-[#00ADB5] text-white px-4 py-2 rounded shadow font-semibold">
               Export PDF
             </button>
           </div>
@@ -404,12 +363,12 @@ export default function Compliances() {
 
         {/* History Log / Audit Trail */}
         <section className="glass-card mt-8">
-          <h2 className="text-lg font-bold mb-4 text-pink-400">Audit Trail</h2>
+          <h2 className="text-lg font-bold mb-4 text-[#00ADB5]">Audit Trail</h2>
           <div className="space-y-4">
             {filteredDocs.map(doc => (
               <div key={doc.id}>
-                <div className="font-semibold text-pink-400">{doc.name}</div>
-                <ul className="text-xs text-purple-200 ml-4 mt-1 space-y-1">
+                <div className="font-semibold text-[#00ADB5]">{doc.name}</div>
+                <ul className="text-xs text-[#B8C1EC] ml-4 mt-1 space-y-1">
                   {doc.history.map((h, i) => (
                     <li key={i}>
                       [{h.time}] {h.action} by {h.user}
@@ -419,17 +378,17 @@ export default function Compliances() {
               </div>
             ))}
             {filteredDocs.length === 0 && (
-              <div className="text-purple-300 text-sm">No history to show.</div>
+              <div className="text-[#B8C1EC] text-sm">No history to show.</div>
             )}
           </div>
         </section>
       </div>
       {/* Footer */}
       <footer className="w-full mt-12 py-6 flex justify-center items-center">
-        <p className="text-purple-200 text-center text-sm font-semibold glow-text">
+  <p className="text-[#B8C1EC] text-center text-sm font-semibold glow-text">
           Upload, track, and manage all compliance-related files and deadlines.
         </p>
-      </footer>``
+      </footer>
       <style>{`
         .glass-card {
           background: rgba(36, 36, 62, 0.7);

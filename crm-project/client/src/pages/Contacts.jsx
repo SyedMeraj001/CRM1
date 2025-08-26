@@ -2,35 +2,10 @@ import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 
-const SAMPLE_CONTACTS = [
-	{
-		id: 1,
-		name: "Alice Johnson",
-		email: "alice@ecocorp.com",
-		company: "EcoCorp",
-		designation: "Sustainability Manager",
-		linkedin: "https://linkedin.com/company/ecocorp",
-	},
-	{
-		id: 2,
-		name: "Bob Smith",
-		email: "bob@greentech.com",
-		company: "GreenTech",
-		designation: "ESG Analyst",
-		linkedin: "",
-	},
-	{
-		id: 3,
-		name: "Carol Lee",
-		email: "carol@sustaina.com",
-		company: "Sustaina Inc",
-		designation: "Chief ESG Officer",
-		linkedin: "https://linkedin.com/company/sustainainc",
-	},
-];
+const SAMPLE_CONTACTS = []; // Removed sample contacts
 
-export default function Contacts() {
-	const [contacts, setContacts] = useState(SAMPLE_CONTACTS);
+export default function Contacts({ search = "" }) {
+	const [contacts, setContacts] = useState([]);
 	const [newContact, setNewContact] = useState({
 		name: "",
 		email: "",
@@ -46,12 +21,15 @@ export default function Contacts() {
 		designation: "",
 		linkedin: "",
 	});
-	const [role, setRole] = useState("user"); // For normal user
+		const [role, setRole] = useState("user");
 	const navigate = useNavigate();
 
 	useEffect(() => {
-		fetchContacts();
-	}, []);
+			fetchContacts();
+			// Set role from localStorage if available
+			const storedRole = localStorage.getItem("role");
+			if (storedRole) setRole(storedRole);
+		}, []);
 
 	const fetchContacts = async () => {
 		try {
@@ -96,36 +74,59 @@ export default function Contacts() {
 			console.error(err);
 		}
 	};
-
-	// Start editing
+	// ...existing code...
+	// Filter contacts by search prop from Dashboard
+	const filteredContacts = contacts.filter(c =>
+	  c && (
+	    (c.name && c.name.toLowerCase().includes(search.toLowerCase())) ||
+	    (c.email && c.email.toLowerCase().includes(search.toLowerCase())) ||
+	    (c.company && c.company.toLowerCase().includes(search.toLowerCase())) ||
+	    (c.designation && c.designation.toLowerCase().includes(search.toLowerCase())) ||
+	    (c.linkedin && c.linkedin.toLowerCase().includes(search.toLowerCase()))
+	  )
+	);
 	const handleEdit = (contact) => {
-		setEditingId(contact.id);
-		setEditContact({
-			name: contact.name,
-			email: contact.email,
-			company: contact.company,
-			designation: contact.designation,
-			linkedin: contact.linkedin || "",
-		});
+			setEditingId(contact.id);
+			setEditContact({
+				name: contact.name,
+				email: contact.email,
+				company: contact.company,
+				designation: contact.designation,
+				linkedin: contact.linkedin || "",
+				phone: contact.phone || "",
+				role: contact.role || "user"
+			});
 	};
 
-	// Save edit
+	// ...existing code...
 	const handleSave = async (id) => {
-		try {
-			await axios.put(`/api/contacts/${id}`, editContact);
-			fetchContacts();
-			setEditingId(null);
-			setEditContact({
-				name: "",
-				email: "",
-				company: "",
-				designation: "",
-				linkedin: "",
-			});
-		} catch (err) {
-			console.error(err);
-		}
-	};
+					try {
+						// Send all fields, including designation and linkedin
+						const contactToSend = {
+							name: editContact.name || "",
+							email: editContact.email || "",
+							phone: editContact.phone || "",
+							company: editContact.company || "",
+							role: editContact.role || "user",
+							designation: editContact.designation || "",
+							linkedin: editContact.linkedin || ""
+						};
+						await axios.put(`/api/contacts/${id}`, contactToSend);
+						fetchContacts();
+						setEditingId(null);
+						setEditContact({
+							name: "",
+							email: "",
+							company: "",
+							designation: "",
+							linkedin: "",
+							phone: "",
+							role: "user"
+						});
+					} catch (err) {
+						console.error(err);
+					}
+	}
 
 	// Cancel edit
 	const handleCancel = () => {
@@ -140,17 +141,17 @@ export default function Contacts() {
 	};
 
 	return (
-		<div className="min-h-screen bg-gradient-to-tr from-[#232946]/80 to-[#0f2027]/90 text-white font-sans p-8 flex flex-col items-center">
+	<div className="min-h-screen bg-gradient-to-br from-[#1A1A2E] via-[#16213E] to-[#0F3460] p-8 text-white flex flex-col items-center">
 			<div className="w-full max-w-4xl mx-auto">
 				<div className="flex items-center justify-between mb-6 w-full">
 					<h1 className="text-2xl font-bold text-pink-400">Contacts</h1>
 				</div>
 
-				{/* Add Contact Form */}
-				<form
-					onSubmit={handleAdd}
-					className="flex flex-wrap gap-4 mb-8 items-end bg-[#232946]/60 p-6 rounded-2xl shadow-lg border border-purple-700"
-				>
+							{/* Add Contact Form */}
+							<form
+								onSubmit={handleAdd}
+								className="flex flex-wrap gap-4 mb-8 items-end bg-[#232946]/60 p-6 rounded-2xl shadow-lg border border-purple-700"
+								>
 					<input
 						type="text"
 						placeholder="Name"
@@ -218,59 +219,70 @@ export default function Contacts() {
 							</tr>
 						</thead>
 						<tbody>
-							{contacts.map((contact) =>
+												{filteredContacts.map((contact) =>
 								editingId === contact.id ? (
-									<tr key={contact.id} className="border-t bg-[#232946]/30">
-										<td className="py-2 px-4">
-											<input
-												type="text"
-												className="border border-pink-400 rounded px-2 py-1 w-full bg-[#232946]/40 text-white"
-												value={editContact.name}
-												onChange={(e) =>
-													setEditContact({ ...editContact, name: e.target.value })
-												}
-											/>
-										</td>
-										<td className="py-2 px-4">
-											<input
-												type="email"
-												className="border border-pink-400 rounded px-2 py-1 w-full bg-[#232946]/40 text-white"
-												value={editContact.email}
-												onChange={(e) =>
-													setEditContact({ ...editContact, email: e.target.value })
-												}
-											/>
-										</td>
-										<td className="py-2 px-4">
-											<input
-												type="text"
-												className="border border-pink-400 rounded px-2 py-1 w-full bg-[#232946]/40 text-white"
-												value={editContact.company}
-												onChange={(e) =>
-													setEditContact({ ...editContact, company: e.target.value })
-												}
-											/>
-										</td>
-										<td className="py-2 px-4">
-											<input
-												type="text"
-												className="border border-pink-400 rounded px-2 py-1 w-full bg-[#232946]/40 text-white"
-												value={editContact.designation}
-												onChange={(e) =>
-													setEditContact({ ...editContact, designation: e.target.value })
-												}
-											/>
-										</td>
-										<td className="py-2 px-4">
-											<input
-												type="url"
-												className="border border-pink-400 rounded px-2 py-1 w-full bg-[#232946]/40 text-white"
-												value={editContact.linkedin}
-												onChange={(e) =>
-													setEditContact({ ...editContact, linkedin: e.target.value })
-												}
-											/>
-										</td>
+													<tr key={contact.id} className="border-t bg-[#232946]/30">
+														<td className="py-2 px-4">
+															<input
+																type="text"
+																className="border border-pink-400 rounded px-2 py-1 w-full bg-[#232946]/40 text-white"
+																value={editContact.name}
+																onChange={(e) =>
+																	setEditContact({ ...editContact, name: e.target.value })
+																}
+															/>
+														</td>
+														<td className="py-2 px-4">
+															<input
+																type="email"
+																className="border border-pink-400 rounded px-2 py-1 w-full bg-[#232946]/40 text-white"
+																value={editContact.email}
+																onChange={(e) =>
+																	setEditContact({ ...editContact, email: e.target.value })
+																}
+															/>
+														</td>
+														<td className="py-2 px-4">
+															<input
+																type="text"
+																className="border border-pink-400 rounded px-2 py-1 w-full bg-[#232946]/40 text-white"
+																value={editContact.company}
+																onChange={(e) =>
+																	setEditContact({ ...editContact, company: e.target.value })
+																}
+															/>
+														</td>
+														<td className="py-2 px-4">
+															<input
+																type="text"
+																className="border border-pink-400 rounded px-2 py-1 w-full bg-[#232946]/40 text-white"
+																value={editContact.designation}
+																onChange={(e) =>
+																	setEditContact({ ...editContact, designation: e.target.value })
+																}
+															/>
+														</td>
+														<td className="py-2 px-4">
+															<input
+																type="url"
+																className="border border-pink-400 rounded px-2 py-1 w-full bg-[#232946]/40 text-white"
+																value={editContact.linkedin}
+																onChange={(e) =>
+																	setEditContact({ ...editContact, linkedin: e.target.value })
+																}
+															/>
+														</td>
+														<td className="py-2 px-4">
+															<input
+																type="text"
+																placeholder="Phone"
+																className="border border-pink-400 rounded px-2 py-1 w-full bg-[#232946]/40 text-white"
+																value={editContact.phone}
+																onChange={(e) =>
+																	setEditContact({ ...editContact, phone: e.target.value })
+																}
+															/>
+														</td>
 										<td className="py-2 px-4 flex gap-2">
 											<button
 												type="button"
@@ -293,7 +305,7 @@ export default function Contacts() {
 										<td className="py-2 px-4 text-purple-100">{contact.name}</td>
 										<td className="py-2 px-4 text-purple-100">{contact.email}</td>
 										<td className="py-2 px-4 text-purple-100">{contact.company}</td>
-										<td className="py-2 px-4 text-purple-100">{contact.designation}</td>
+										<td className="py-2 px-4 text-purple-100">{contact.designation && contact.designation.trim() ? contact.designation : 'N/A'}</td>
 										<td className="py-2 px-4">
 											{contact.linkedin ? (
 												<a
@@ -308,23 +320,22 @@ export default function Contacts() {
 												<span className="text-purple-300">N/A</span>
 											)}
 										</td>
-										<td className="py-2 px-4 flex gap-2">
-											<button
-												type="button"
-												onClick={() => handleEdit(contact)}
-												className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded text-sm"
-											>
-												Edit
-											</button>
-											{/* Only show Delete button for admin */}
-											{role === "admin" && (
-												<button
-													type="button"
-													onClick={() => handleDelete(contact.id)}
-													className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm"
-												>
-													Delete
-												</button>
+															<td className="py-2 px-4 flex gap-2">
+																<button
+																	type="button"
+																	onClick={() => handleEdit(contact)}
+																	className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded text-sm"
+																>
+																	Edit
+																</button>
+																{role === "admin" && (
+																	<button
+																		type="button"
+																		onClick={() => handleDelete(contact.id)}
+																		className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm"
+																	>
+																		Delete
+																	</button>
 											)}
 										</td>
 									</tr>

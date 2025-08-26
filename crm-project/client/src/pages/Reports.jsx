@@ -11,13 +11,52 @@ import Modal from "../components/Modal";
 const MAX_FILE_SIZE_MB = 10;
 const ALLOWED_TYPES = ["application/pdf"];
 
-const reportsData = [
-  { title: "Q1 Report", date: "2025-03-31" },
-  { title: "ESG Summary", date: "2025-04-15" },
-  // ...
-];
+
 
 const Reports = () => {
+  const [editingId, setEditingId] = useState(null);
+  const [editReport, setEditReport] = useState({ company: '', year: '', metrics: '', summary: '' });
+  const [updateStatus, setUpdateStatus] = useState('');
+
+  // Start editing a report
+  function handleEdit(report) {
+    setEditingId(report.id);
+    setEditReport({
+      company: report.company || "",
+      year: report.year || "",
+      standard: report.standard || "",
+      status: report.status || "",
+    });
+    setUpdateStatus('');
+  }
+
+  // Cancel editing
+  function handleCancelEdit() {
+    setEditingId(null);
+    setEditReport({ company: '', year: '', standard: '', status: '' });
+    setUpdateStatus('');
+  }
+
+  // Save updated report
+  async function handleSaveEdit(id) {
+    setUpdateStatus('Updating...');
+    try {
+      const res = await fetch(`/api/reports/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editReport),
+      });
+      if (res.ok) {
+        setUpdateStatus('Update successful!');
+        setEditingId(null);
+        fetchReports();
+      } else {
+        setUpdateStatus('Update failed.');
+      }
+    } catch (err) {
+      setUpdateStatus('Update failed.');
+    }
+  }
   const navigate = useNavigate();
   const [reports, setReports] = useState([]);
   const [selectedFile, setSelectedFile] = useState(null);
@@ -25,81 +64,73 @@ const Reports = () => {
   const [uploadStatus, setUploadStatus] = useState("");
   const [search, setSearch] = useState("");
   const [benchmarkOpen, setBenchmarkOpen] = useState(false);
+  const [error, setError] = useState("");
+  const [uploadedFile, setUploadedFile] = useState(null);
 
   useEffect(() => {
     fetchReports();
   }, []);
 
   const fetchReports = async () => {
-    // Simulated fetch from backend
-    const dummyReports = [
-      {
-        id: 1,
-        company: "ABC Corp",
-        year: 2024,
-        standard: "BRSR",
-        filename: "abc_report.pdf",
-        status: "Submitted",
-        timestamp: "2024-04-10",
-        fileUrl: "",
-      },
-      {
-        id: 2,
-        company: "XYZ Pvt Ltd",
-        year: 2025,
-        standard: "GRI",
-        filename: "xyz_report.pdf",
-        status: "Pending Review",
-        timestamp: "2025-07-14",
-        fileUrl: "",
-      },
-    ];
-    setReports(dummyReports);
+    try {
+      const res = await fetch("/api/reports");
+      const data = await res.json();
+      // Add fileUrl for preview/download
+      setReports(data.map(r => ({
+        ...r,
+        fileUrl: r.filename ? `http://localhost:5000/uploads/${r.filename}` : null
+      })));
+    } catch (err) {
+      console.error("Failed to fetch reports", err);
+    }
   };
 
-  const handleFileUpload = (e) => {
-    setUploadStatus("");
+  const handleFileChange = (e) => {
     const file = e.target.files[0];
-    if (!file) return;
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      setUploadStatus("Only PDF files are allowed.");
+    if (!file) {
+      setError("No file selected.");
       setSelectedFile(null);
       return;
     }
-    if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
-      setUploadStatus("File size exceeds 10MB.");
+    if (file.type !== "application/pdf") {
+      setError("Only PDF files are allowed.");
       setSelectedFile(null);
       return;
     }
+    if (file.size > 10 * 1024 * 1024) {
+      setError("Max file size is 10MB.");
+      setSelectedFile(null);
+      return;
+    }
+    setError("");
     setSelectedFile(file);
   };
 
-  const handleUpload = () => {
+  const handleUpload = async () => {
     if (!selectedFile) {
-      setUploadStatus("No file selected.");
+      setError("No file selected.");
       return;
     }
-    setUploadStatus("Uploading...");
-    setTimeout(() => {
-      setReports((prev) => [
-        {
-          id: prev.length + 1,
-          company: "New Company",
-          year: new Date().getFullYear(),
-          standard: "BRSR",
-          filename: selectedFile.name,
-          status: "Submitted",
-          timestamp: new Date().toISOString().slice(0, 10),
-          fileUrl: "", // In real app, set the uploaded file URL
-        },
-        ...prev,
-      ]);
-      setUploadStatus("Upload successful!");
-      setSelectedFile(null);
-    }, 1200);
+    const formData = new FormData();
+    formData.append("file", selectedFile);
+
+    const response = await fetch("http://localhost:5000/api/upload", {
+      method: "POST",
+      body: formData,
+    });
+    const result = await response.json();
+    if (result.ok) {
+      setUploadedFile(result);
+      setError("");
+      fetchReports();
+    } else {
+      setError(result.message || "Upload failed.");
+    }
   };
 
+  // Export functions only called on button click
   const exportToCSV = () => {
+    console.log("exportToCSV called");
     const csv = Papa.unparse(reports);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = window.URL.createObjectURL(blob);
@@ -112,6 +143,7 @@ const Reports = () => {
   };
 
   const exportToPDF = () => {
+    console.log("exportToPDF called");
     const doc = new jsPDF();
     doc.text("ESG Report Summary", 14, 16);
     doc.autoTable({
@@ -130,15 +162,15 @@ const Reports = () => {
   const filteredReports = reports
     .filter((r) => {
       if (filter === "all") return true;
-      const year = new Date(r.timestamp).getFullYear();
+      const year = r.year || null;
       const now = new Date().getFullYear();
-      if (filter === "monthly") {
+      if (filter === "monthly" && r.uploaded_at) {
         const thisMonth = new Date().getMonth();
         return (
-          new Date(r.timestamp).getMonth() === thisMonth && year === now
+          new Date(r.uploaded_at).getMonth() === thisMonth && year === now
         );
-      } else if (filter === "quarterly") {
-        const month = new Date(r.timestamp).getMonth();
+      } else if (filter === "quarterly" && r.uploaded_at) {
+        const month = new Date(r.uploaded_at).getMonth();
         const quarter = Math.floor(month / 3);
         const currentQuarter = Math.floor(new Date().getMonth() / 3);
         return quarter === currentQuarter && year === now;
@@ -148,26 +180,63 @@ const Reports = () => {
       return false;
     })
     .filter((r) => {
-      const q = search.trim().toLowerCase();
-      if (!q) return true;
+      if (!search) return true;
+      const q = search.toLowerCase();
       return (
-        r.company.toLowerCase().includes(q) ||
-        r.standard.toLowerCase().includes(q) ||
-        String(r.year).includes(q)
+        (r.company && r.company.toLowerCase().includes(q)) ||
+        (r.metrics && r.metrics.toLowerCase().includes(q)) ||
+        (r.year && String(r.year).toLowerCase().includes(q))
       );
     });
 
   // --- Analytics UI Components ---
   function LinkedReportGraph({ reports }) {
+    // Define a color palette for non-null bars
+    const vibrantColors = [
+      "#00ADB5", // teal
+      "#FF5722", // orange
+      "#A78BFA", // purple
+      "#22d3ee", // cyan
+      "#F59E42", // gold
+      "#FF4081", // pink
+      "#4ADE80", // green
+    ];
+    const nullColor = "#888888"; // gray for null/zero/NaN
+
+    // Helper to check if score is valid
+    const isValidScore = (score) => {
+      const n = Number(score);
+      return n || n === 0 ? !isNaN(n) : false;
+    };
+
+    // If no data or all companies are missing, show a message
+    if (!reports || !Array.isArray(reports) || reports.length === 0 || reports.every(r => !r.company)) {
+      return (
+        <div className="glass-card mb-8 border-t-4 border-green-500 flex items-center justify-center min-h-[180px]">
+          <h2 className="text-xl font-bold text-green-400">Linked CMR Reports</h2>
+          <div className="w-full text-center text-gray-400 mt-4">No data available for graph.</div>
+        </div>
+      );
+    }
+
     return (
       <div className="glass-card mb-8 border-t-4 border-green-500">
         <h2 className="text-xl font-bold mb-4 text-green-400">Linked CMR Reports</h2>
+        <div className="text-xs text-gray-400 mb-2">Gray bars = No Data</div>
         <ResponsiveContainer width="100%" height={180}>
           <BarChart data={reports}>
             <XAxis dataKey="company" stroke="#22d3ee" />
             <YAxis stroke="#a78bfa" />
             <RechartsTooltip />
-            <Bar dataKey="score" fill="#22d3ee" radius={[8,8,0,0]} />
+            <Bar dataKey="score" radius={[8,8,0,0]}>
+              {reports.map((entry, index) => {
+                const n = Number(entry.score);
+                const fill = isValidScore(entry.score)
+                  ? vibrantColors[index % vibrantColors.length]
+                  : nullColor;
+                return <Cell key={`cell-${index}`} fill={fill} />;
+              })}
+            </Bar>
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -221,7 +290,7 @@ const Reports = () => {
   // Example analytics data (replace with real data as needed)
   const linkedReports = reports.map(r => ({
     company: r.company,
-    score: Math.floor(Math.random() * 40) + 60 // Dummy ESG score
+    score: r.esg_score || 0 // Use real ESG score if available
   }));
   const benchmarks = linkedReports.map(r => ({
     company: r.company,
@@ -230,35 +299,35 @@ const Reports = () => {
   }));
   const companySummary = {
     company: reports[0]?.company || "N/A",
-    metrics: ["Environment", "Social", "Governance"],
-    text: `${reports[0]?.company || "This company"} is above peer average in Environment, meets Social and Governance standards.`
+    metrics: reports[0]?.metrics ? reports[0].metrics.split(',').map(m => m.trim()) : ["Environment", "Social", "Governance"],
+    text: reports[0]?.summary || `${reports[0]?.company || "This company"} is above peer average in Environment, meets Social and Governance standards.`
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-tr from-[#232946]/80 to-[#0f2027]/90 p-8 text-white flex flex-col items-center">
+  <div className="min-h-screen bg-gradient-to-br from-[#1A1A2E] via-[#16213E] to-[#0F3460] p-8 text-white font-sans flex flex-col items-center">
       {/* Page Title */}
-      <div className="flex items-center justify-between mb-6 w-full max-w-2xl mx-auto">
-        <h1 className="text-2xl font-bold text-pink-400 flex items-center">
+      <div className="flex items-center justify-between mb-8 w-full max-w-3xl mx-auto">
+        <h1 className="text-4xl font-extrabold text-[#00ADB5] drop-shadow-lg flex items-center tracking-tight">
           📄 ESG Report Management
         </h1>
       </div>
 
       {/* Upload Section */}
       <section className="max-w-2xl mx-auto mb-12 w-full flex justify-center">
-        <div className="glass-card shadow-lg border border-purple-700 p-8 flex flex-col gap-4 items-center w-full">
-          <h2 className="text-xl font-bold text-pink-400 mb-2 w-full text-center">
+        <div className="glass-card shadow-xl border border-[#FF5722] p-10 flex flex-col gap-6 items-center w-full">
+          <h2 className="text-2xl font-extrabold text-[#FF5722] mb-4 w-full text-center drop-shadow-lg">
             Upload ESG Report
           </h2>
           <div className="flex flex-col md:flex-row w-full gap-4 items-center justify-center">
             <input
               type="file"
-              className="block w-full text-sm text-white border border-pink-400 rounded-lg cursor-pointer bg-[#232946]/60 focus:outline-none placeholder-purple-300"
+              className="block w-full text-sm text-white border border-[#00ADB5] rounded-lg cursor-pointer bg-[#16213E] focus:outline-none placeholder-[#B8C1EC]"
               accept="application/pdf"
-              onChange={handleFileUpload}
+              onChange={handleFileChange}
             />
             <button
               onClick={handleUpload}
-              className="bg-gradient-to-r from-green-500 to-purple-600 hover:from-green-600 hover:to-purple-700 text-white px-6 py-2 rounded-full font-bold shadow transition w-full md:w-auto"
+              className="bg-gradient-to-r from-[#00ADB5] to-[#FF5722] hover:from-[#00ADB5] hover:to-[#FF5722] text-white px-6 py-2 rounded-full font-bold shadow transition w-full md:w-auto"
             >
               Upload
             </button>
@@ -271,10 +340,10 @@ const Reports = () => {
               <div
                 className={`mt-1 text-sm font-semibold ${
                   uploadStatus.includes("success")
-                    ? "text-green-400"
+                    ? "text-[#00ADB5]"
                     : uploadStatus.includes("Uploading")
-                    ? "text-purple-300"
-                    : "text-pink-400"
+                    ? "text-[#B8C1EC]"
+                    : "text-[#FF5722]"
                 }`}
               >
                 {uploadStatus}
@@ -284,12 +353,34 @@ const Reports = () => {
               Only PDF files, max size 10MB.
             </div>
           </div>
+          {error && <div className="text-red-400 text-sm mt-2">{error}</div>}
+          {uploadedFile && (
+            <div className="mt-4">
+              <p className="text-sm text-purple-200">Uploaded: {uploadedFile.originalname}</p>
+              <a
+                href={`http://localhost:5000/uploads/${uploadedFile.filename}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-cyan-400 underline"
+              >
+                View PDF
+              </a>
+              <br />
+              <embed
+                src={`http://localhost:5000/uploads/${uploadedFile.filename}`}
+                width="100%"
+                height="180px"
+                type="application/pdf"
+                className="rounded border mt-2"
+              />
+            </div>
+          )}
         </div>
       </section>
 
       {/* Filters, Search, Export */}
       <section className="max-w-7xl mx-auto mb-10 w-full flex flex-col items-center">
-        <div className="flex flex-col md:flex-row items-center justify-center gap-4 w-full">
+        <div className="glass-card shadow-xl border border-[#00ADB5] p-8 flex flex-col md:flex-row items-center justify-center gap-6 w-full mb-6">
           <div className="flex gap-2 md:gap-3 justify-center">
             {["all", "monthly", "quarterly", "yearly"].map((f) => (
               <button
@@ -308,22 +399,22 @@ const Reports = () => {
           <input
             type="text"
             placeholder="Search company, standard, year..."
-            className="rounded-full px-4 py-2 border border-pink-400 bg-[#232946]/60 text-white focus:outline-none focus:ring-2 focus:ring-pink-400 transition w-full md:w-80 placeholder-purple-300 text-center"
+            className="rounded-full px-4 py-2 border border-[#00ADB5] bg-[#16213E] text-white focus:outline-none focus:ring-2 focus:ring-[#00ADB5] transition w-full md:w-80 placeholder-[#B8C1EC] text-center"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
         {/* Export options at bottom center */}
-        <div className="flex gap-2 md:gap-3 justify-center mt-6">
+  <div className="flex gap-2 md:gap-3 justify-center mt-6">
           <button
             onClick={exportToCSV}
-            className="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-full font-semibold shadow transition text-white"
+            className="bg-gradient-to-r from-[#00ADB5] to-[#FF5722] hover:from-[#00ADB5] hover:to-[#FF5722] px-4 py-2 rounded-full font-semibold shadow transition text-white"
           >
             Export CSV
           </button>
           <button
             onClick={exportToPDF}
-            className="bg-pink-500 hover:bg-pink-600 px-4 py-2 rounded-full font-semibold shadow transition text-white"
+            className="bg-gradient-to-r from-[#FF5722] to-[#00ADB5] hover:from-[#FF5722] hover:to-[#00ADB5] px-4 py-2 rounded-full font-semibold shadow transition text-white"
           >
             Export PDF
           </button>
@@ -332,7 +423,7 @@ const Reports = () => {
 
       {/* Report Cards */}
       <section className="max-w-7xl mx-auto w-full flex justify-center">
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8 w-full justify-items-center">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-10 w-full justify-items-center">
           {filteredReports.length === 0 && (
             <div className="col-span-3 text-center text-purple-300 py-8 text-lg">
               No reports found.
@@ -341,61 +432,148 @@ const Reports = () => {
           {filteredReports.map((report) => (
             <div
               key={report.id}
-              className={`relative glass-card border-l-4 shadow-md flex flex-col transition hover:scale-[1.025] hover:shadow-xl ${
+              className={`relative glass-card border-l-4 shadow-xl flex flex-col transition hover:scale-[1.03] hover:shadow-2xl ${
                 report.status === "Submitted"
-                  ? "border-green-400"
-                  : "border-pink-400"
+                  ? "border-[#00ADB5]"
+                  : "border-[#FF5722]"
               }`}
             >
-              <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-2 mb-2">
-                <h3 className="text-xl font-bold text-pink-400 text-center w-full">
-                  {report.company}
-                </h3>
-                <span
-                  className={`px-3 py-1 rounded-full text-xs font-bold shadow ${
-                    report.status === "Submitted"
-                      ? "bg-green-400/20 text-green-300"
-                      : "bg-pink-400/20 text-pink-300"
-                  }`}
-                >
-                  {report.status}
-                </span>
-              </div>
-              <div className="mb-1 text-purple-200 text-center">
-                Year: <span className="font-semibold">{report.year}</span>
-              </div>
-              <div className="mb-1 text-purple-200 text-center">
-                Standard: <span className="font-semibold">{report.standard}</span>
-              </div>
-              <div className="text-xs text-purple-300 mb-2 text-center">
-                Submitted on: {report.timestamp}
-              </div>
-              <div className="mt-2 mb-3 flex justify-center">
-                {report.fileUrl ? (
-                  <embed
-                    src={report.fileUrl}
-                    type="application/pdf"
-                    width="100%"
-                    height="180px"
-                    className="rounded border"
-                  />
-                ) : (
-                  <div className="bg-[#232946]/40 text-purple-300 rounded p-4 text-center text-xs">
-                    PDF preview not available.
+              {editingId === report.id ? (
+                <>
+                  <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-2 mb-2">
+                    <input
+                      type="text"
+                      className="text-2xl font-extrabold text-[#00ADB5] text-center w-full drop-shadow bg-[#16213E] rounded px-2 py-1 mb-2"
+                      value={editReport.company}
+                      onChange={e => setEditReport({ ...editReport, company: e.target.value })}
+                      placeholder="Company"
+                    />
+                    <select
+                      className="px-4 py-1 rounded-full text-sm font-bold shadow-lg bg-[#232946] text-[#00ADB5]"
+                      value={editReport.status}
+                      onChange={e => setEditReport({ ...editReport, status: e.target.value })}
+                    >
+                      <option value="Submitted">Submitted</option>
+                      <option value="Draft">Draft</option>
+                      <option value="Archived">Archived</option>
+                    </select>
                   </div>
-                )}
-              </div>
-              <div className="flex gap-3 mt-auto justify-center">
-                {report.fileUrl && (
-                  <a
-                    href={report.fileUrl}
-                    download={report.filename}
-                    className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-1.5 rounded-full text-sm font-semibold shadow transition"
-                  >
-                    Download
-                  </a>
-                )}
-              </div>
+                  <div className="mb-1 text-[#B8C1EC] text-center text-lg">
+                    Year: <input
+                      type="text"
+                      className="font-semibold text-white bg-[#16213E] rounded px-2 py-1"
+                      value={editReport.year || ""}
+                      onChange={e => setEditReport({ ...editReport, year: e.target.value })}
+                      placeholder="Year"
+                    />
+                  </div>
+                  <div className="mb-1 text-[#B8C1EC] text-center text-lg">
+                    Standard: <input
+                      type="text"
+                      className="font-semibold text-white bg-[#16213E] rounded px-2 py-1"
+                      value={editReport.standard || ""}
+                      onChange={e => setEditReport({ ...editReport, standard: e.target.value })}
+                      placeholder="Standard"
+                    />
+                  </div>
+                  <div className="text-sm text-[#B8C1EC] mb-2 text-center">
+                    Submitted on: {report.timestamp}
+                  </div>
+                  <div className="mt-2 mb-3 flex justify-center">
+                    {report.fileUrl ? (
+                      <embed
+                        src={report.fileUrl}
+                        type="application/pdf"
+                        width="100%"
+                        height="180px"
+                        className="rounded border"
+                      />
+                    ) : (
+                      <div className="bg-[#16213E]/40 text-[#B8C1EC] rounded p-4 text-center text-xs">
+                        PDF preview not available.
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex gap-4 mt-auto justify-center">
+                    <button
+                      className="bg-gradient-to-r from-green-500 to-teal-500 text-white px-6 py-2 rounded-full text-base font-bold shadow-lg transition"
+                      onClick={() => handleSaveEdit(report.id)}
+                    >
+                      Save
+                    </button>
+                    <button
+                      className="bg-gradient-to-r from-gray-500 to-gray-700 text-white px-6 py-2 rounded-full text-base font-bold shadow-lg transition"
+                      onClick={handleCancelEdit}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  {updateStatus && (
+                    <div className="text-center text-sm mt-2 font-semibold text-[#00ADB5]">{updateStatus}</div>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-2 mb-2">
+                    <h3 className="text-2xl font-extrabold text-[#00ADB5] text-center w-full drop-shadow">
+                      {report.company}
+                    </h3>
+                    <span
+                      className={`px-4 py-1 rounded-full text-sm font-bold shadow-lg ${
+                        report.status === "Submitted"
+                          ? "bg-[#00ADB5]/20 text-[#00ADB5]"
+                          : "bg-[#FF5722]/20 text-[#FF5722]"
+                      }`}
+                    >
+                      {report.status}
+                    </span>
+                  </div>
+                  <div className="mb-1 text-[#B8C1EC] text-center text-lg">
+                    Year: <span className="font-semibold text-white">{report.year}</span>
+                  </div>
+                  <div className="mb-1 text-[#B8C1EC] text-center text-lg">
+                    Metrics: <span className="font-semibold text-white">{report.metrics}</span>
+                  </div>
+                  <div className="mb-1 text-[#B8C1EC] text-center text-lg">
+                    Summary: <span className="font-semibold text-white">{report.summary}</span>
+                  </div>
+                  <div className="text-sm text-[#B8C1EC] mb-2 text-center">
+                    Submitted on: {report.timestamp}
+                  </div>
+                  <div className="mt-2 mb-3 flex justify-center">
+                    {report.fileUrl ? (
+                      <embed
+                        src={report.fileUrl}
+                        type="application/pdf"
+                        width="100%"
+                        height="180px"
+                        className="rounded border"
+                      />
+                    ) : (
+                      <div className="bg-[#16213E]/40 text-[#B8C1EC] rounded p-4 text-center text-xs">
+                        PDF preview not available.
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex gap-4 mt-auto justify-center">
+                    {report.fileUrl && (
+                      <a
+                        href={report.fileUrl}
+                        download={report.filename}
+                        className="bg-gradient-to-r from-[#00ADB5] to-[#FF5722] hover:from-[#00ADB5] hover:to-[#FF5722] text-white px-6 py-2 rounded-full text-base font-bold shadow-lg transition"
+                      >
+                        Download
+                      </a>
+                    )}
+                    <button
+                      className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white px-6 py-2 rounded-full text-base font-bold shadow-lg transition"
+                      onClick={() => handleEdit(report)}
+                    >
+                      Edit
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           ))}
         </div>
